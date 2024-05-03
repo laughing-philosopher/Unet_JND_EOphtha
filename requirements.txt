@@ -1,5 +1,5 @@
 tensorflow==2.15.1
-opencv-python
+opencv-python-headless
 natsort
 numpy
 matplotlib
