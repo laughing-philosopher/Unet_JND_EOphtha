@@ -92,6 +92,6 @@ def processing(img):
         cnt2 = cnt2 + 1
 
     psm_th2 = final_res / np.max(final_res)
-    psm_th2 = (psm_th2 > 0.05).astype(float)
+    psm_th2 = (psm_th2 > 0.1).astype(float)
 
     return psm_th2
