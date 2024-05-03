@@ -31,7 +31,8 @@ Img_Channels = 1
 model = build_UNet((Img_Width, Img_Height, Img_Channels),(Img_Width, Img_Height, Img_Channels))
 model.load_weights('UNet_JND_EOphtha.h5')
 
-def processing(img):
+def processing(img, threshold):
+    print(threshold)
     print(img.shape)
     img1 = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
@@ -56,8 +57,7 @@ def processing(img):
                 pass
             else:
                 tot = tot + 1
-
-    threshold = 0.30 # increase this threshold if more false positives are coming
+     # increase this threshold if more false positives are coming
     cnt1 = 0
     cnt2 = 0
     iarr = []
@@ -92,6 +92,6 @@ def processing(img):
         cnt2 = cnt2 + 1
 
     psm_th2 = final_res / np.max(final_res)
-    psm_th2 = (psm_th2 > 0.2).astype(float)
+    psm_th2 = (psm_th2 > 0.1).astype(float)
 
     return psm_th2
