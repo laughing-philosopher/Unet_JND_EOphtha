@@ -1,20 +1,42 @@
+import tensorflow as tf
+from tensorflow.keras.layers import Layer
 from tensorflow.keras import backend as K
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 from tensorflow.keras.layers import Conv2D, BatchNormalization, Activation, MaxPool2D, Conv2DTranspose, Concatenate, Input, Dropout, Lambda, Add, Multiply
 
 
-def simAM(inp1, inp2):
+class SimAM(Layer):
+    def __init__(self, lamda=1e-4, **kwargs):
+        super().__init__(**kwargs)
+        self.lamda = lamda
 
-    lamda = 1e-4
-    d = K.square(inp1 - K.mean(inp1, axis=[1,2], keepdims=True))
-    n = (inp1.shape[1] * inp1.shape[2]) - 1
-    v = K.sum(d, axis=[1,2], keepdims=True) / n
-    td_weights = (d / (4*(v + lamda))) + 0.5
-    td_weights = Activation('sigmoid')(td_weights)
-    out = Multiply()([inp2, td_weights])
+    def call(self, inputs):
+        # inputs is a list/tuple: (inp1, inp2)
+        inp1, inp2 = inputs
 
-    return out, td_weights
+        # ensure numeric dtype (but do it inside the Layer so it's valid for KerasTensor)
+        inp1 = tf.cast(inp1, tf.float32)
+        inp2 = tf.cast(inp2, tf.float32)
+
+        # local mean and squared difference
+        mean = tf.reduce_mean(inp1, axis=[1, 2], keepdims=True)
+        d = tf.square(inp1 - mean)
+
+        # dynamic shape for n to be compatible at graph-build time
+        shape = tf.shape(inp1)
+        h = tf.cast(shape[1], tf.float32)
+        w = tf.cast(shape[2], tf.float32)
+        n = (h * w) - 1.0
+
+        v = tf.reduce_sum(d, axis=[1, 2], keepdims=True) / (n + K.epsilon())
+
+        td_weights = (d / (4.0 * (v + self.lamda))) + 0.5
+        td_weights = tf.sigmoid(td_weights)
+
+        out = inp2 * td_weights
+        return [out, td_weights]
+
 
 # A Convolutional Block is composed of 2 consecutive (conv + BN + relu) operations, with a BN in between.
 
@@ -41,9 +63,12 @@ def encoder_block(inp, num_filters):
 
 # Defining Decoder Block
 def decoder_block(inp1, inp2, num_filters):
-
     x = Conv2DTranspose(num_filters, (2,2), strides=2, padding="same")(inp1)
-    skip_features, d3_weights = simAM(x, inp2)
+
+    # Use the SimAM layer
+    skip_and_weights = SimAM()( [x, inp2] )
+    skip_features = skip_and_weights[0]
+    d3_weights = skip_and_weights[1]
 
     x = Concatenate()([x, skip_features])
     x = Dropout(0.2)(x)
