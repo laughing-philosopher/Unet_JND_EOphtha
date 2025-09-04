@@ -1,4 +1,3 @@
-tensorflow==2.15.1
 opencv-python-headless
 natsort
 numpy
@@ -6,3 +5,8 @@ matplotlib
 scikit-learn
 tqdm
 streamlit
+streamlit-image-coordinates
+opencv-python-headless
+tensorflow
+numpy
+scipy
