@@ -3,6 +3,11 @@ import tensorflow as tf
 import numpy as np
 from math import sqrt, ceil
 from scipy.cluster.hierarchy import fclusterdata
+import os
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))   # .../BTP/processing
+ROOT_DIR = os.path.dirname(CURRENT_DIR)                    # .../BTP
+model_path = os.path.join(ROOT_DIR, "models", "retinet_9010.h5")
 
 (cx, cy) = (-1, -1)
 (rx, ry) = (-1, -1)
@@ -60,7 +65,7 @@ def extract_bv(imag = None):
             return (contrast_enhanced_green_fundus, blood_vessels)
 
 def processing(img, coordinates, coordinates2):
-    model = tf.keras.models.load_model('../models/retinet_9010.h5')
+    model = tf.keras.models.load_model(model_path)
     N = 32
 
     # img = cv2.resize(img, (0, 0), fx = 0.33, fy = 0.33)

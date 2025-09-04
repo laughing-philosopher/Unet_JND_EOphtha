@@ -6,8 +6,15 @@ import tensorflow as tf
 from math import sqrt, ceil
 from scipy.cluster.hierarchy import fclusterdata
 
-# Load OD/OC model once at import
-model = tf.keras.models.load_model("../models/retinet_9010.h5")
+import os
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))   # .../BTP/processing
+ROOT_DIR = os.path.dirname(CURRENT_DIR)                    # .../BTP
+model_path = os.path.join(ROOT_DIR, "models", "retinet_9010.h5")
+
+# model.load_weights(model_path)
+
+model = tf.keras.models.load_model(model_path)
 
 def preprocess_image(img_path):
     img = cv2.imread(img_path)

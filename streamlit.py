@@ -153,7 +153,9 @@ def main():
             image_cv2 = np.array(image_pil)
 
             st.subheader("Input image")
-            st.image(image_cv2, use_column_width=True)
+            st.image(image_cv2, width="stretch")
+
+
 
             if trigger_run:
                 proc_module = info["module"]
@@ -176,11 +178,12 @@ def main():
 
                                 st.subheader("Model output (mask / probability map)")
                                 disp = (mask * 255.0).clip(0, 255).astype(np.uint8)
-                                st.image(disp, caption="Model output (0-255)", use_column_width=True)
+                                st.image(disp, caption="Model output (0-255)", width="stretch")
 
                                 overlay = overlay_mask_on_rgb(image_cv2, mask > 0)
                                 st.subheader("Overlay (green marks)")
-                                st.image(overlay, use_column_width=True)
+                                st.image(overlay, width="stretch")
+
                         except Exception as e:
                             st.error(f"Model inference failed: {e}")
 

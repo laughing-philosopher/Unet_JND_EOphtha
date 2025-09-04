@@ -79,6 +79,13 @@ def decoder_block(inp1, inp2, num_filters):
 
     return x, d3_weights
 
+class WeightedMin(Layer):
+    def call(self, inputs):
+        inps2, d31_weights = inputs
+        num = tf.reduce_sum(inps2 * tf.square(d31_weights), axis=[1, 2])
+        den = tf.reduce_sum(d31_weights, axis=[1, 2]) + 1e-8
+        return tf.reduce_min(num / den, axis=-1, keepdims=True)  # keep dims like your K.min
+
 def build_UNet(inp1_shape,inp2_shape):
 
     inps1 = Input(inp1_shape)
@@ -102,7 +109,7 @@ def build_UNet(inp1_shape,inp2_shape):
     u9, d31_weights = decoder_block(u8, c1, 32)
 
     output1 = Conv2D(1, (1,1), padding="same", activation="sigmoid")(u9)
-    output2 = K.min((K.sum((inps2 * K.square(d31_weights)), axis=[1,2]) / (K.sum(inps2, axis=[1,2]) + K.epsilon())),axis=[1])
+    output2 = output2 = WeightedMin()([inps2, d31_weights])
 
     model = Model(inputs=[inps1,inps2], outputs=[output1,output2], name="UNet")
 

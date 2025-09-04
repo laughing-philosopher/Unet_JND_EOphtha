@@ -9,13 +9,18 @@ Img_Width = 48
 Img_Height = 48
 Img_Channels = 1
 
+import os
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))   # .../BTP/processing
+ROOT_DIR = os.path.dirname(CURRENT_DIR)                    # .../BTP
+model_path = os.path.join(ROOT_DIR, "models", "UNet_JND_EOphtha.h5")
 # Lazy model loader to avoid heavy import-time work (useful for Streamlit)
 _model = None
 def get_model():
     global _model
     if _model is None:
         _model = build_UNet((Img_Width, Img_Height, Img_Channels), (Img_Width, Img_Height, Img_Channels))
-        _model.load_weights('../models/UNet_JND_EOphtha.h5')
+        _model.load_weights(model_path)
     return _model
 
 
