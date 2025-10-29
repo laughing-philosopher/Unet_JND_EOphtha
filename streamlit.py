@@ -30,6 +30,7 @@ except Exception as e:
     proc_rfnld = None
     print("RFNLD processing module not found:", e)
 
+from processing.processing_dr_grading import load_dr_model, predict_dr_severity
 
 # Utility: overlay mask on an image (green channel)
 def overlay_mask_on_rgb(rgb_img, mask, alpha=0.6):
@@ -80,6 +81,17 @@ MODEL_INFO = {
             "first click = disc center (C), second click = rim point (R)."
         ),
     },
+    "DRG": {
+        "title": "DR Grading",
+        "module": None,  # uses dedicated functions load_dr_model / predict_dr_severity
+        "description": (
+            "Grades diabetic retinopathy severity (0–4) from a fundus image and maps it "
+            "to No DR / Mild / Moderate / Severe / Proliferative DR."
+        ),
+        "recommended_threshold": None,
+        "recommended_batch": None,
+        "notes": "Loads EfficientNet-B6 weights from models/EfficientNetB6_DR.bin.",
+    },
 }
 
 
@@ -105,6 +117,8 @@ def main():
             set_selected("ODOC")
         if st.button("RFNLD Detector (RFNLD)"):
             set_selected("RFNLD")
+        if st.button("DR Grading"):
+            set_selected("DRG")
 
         st.markdown("---")
         st.markdown("### Quick info")
@@ -134,7 +148,7 @@ def main():
         st.header(info["title"])
         st.write("**Description:**")
         st.write(info["description"]) 
-        if st.session_state.selected_model != "RFNLD":
+        if info["recommended_threshold"] is not None and info["recommended_batch"] is not None:
             st.write("**Recommended threshold:**", info["recommended_threshold"]) 
             st.write("**Recommended batch size:**", info["recommended_batch"]) 
         else:
@@ -219,6 +233,31 @@ def main():
             return  # RFNLD path finishes here
 
         # --- MA / OD-OC paths (threshold + batch) ---
+        if model_key == "DRG":
+            run_now = st.button("Run DR Grading", key=f"run_{model_key}")
+            if run_now:
+                if "dr_model" not in st.session_state:
+                    st.session_state.dr_model = None
+                # Lazy-load DR model exactly once
+                if st.session_state.dr_model is None:
+                    with st.spinner("Loading DR Grading model (EfficientNet-B6) ..."):
+                        try:
+                            st.session_state.dr_model = load_dr_model()
+                        except Exception as e:
+                            st.error(f"Failed to load DR model: {e}")
+                            return
+
+                # predict_dr_severity expects an image path; save temp file
+                try:
+                    import tempfile
+                    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                    image_pil.save(tmp.name)
+                    with st.spinner("Predicting DR severity ..."):
+                        sev = predict_dr_severity(tmp.name, st.session_state.dr_model)
+                    st.success(f"Predicted DR Severity: {sev}")
+                except Exception as e:
+                    st.error(f"DR Grading failed: {e}")
+            return
         thr = st.number_input(
             "Threshold (probability cutoff)",
             min_value=0.0, max_value=1.0,
