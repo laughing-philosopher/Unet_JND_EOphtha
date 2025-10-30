@@ -1,12 +1,17 @@
-import torch
-import torchvision.transforms as transforms
-from PIL import Image
 import os
-import timm
+import sys
 
 # Load the EfficientNetB6 model from local .bin file
 def load_dr_model():
-    model_path = os.path.join("models", "pytorch_model_effb6.bin")
+    import torch  # lazy import to avoid startup issues when packaging
+    import timm   # lazy import
+    # Resolve models directory robustly for both dev and PyInstaller-frozen builds
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    app_root = os.path.abspath(os.path.join(base_dir, os.pardir))
+    # If running from a PyInstaller bundle, _MEIPASS points to the temp dir with bundled files
+    if hasattr(sys, "_MEIPASS"):
+        app_root = sys._MEIPASS
+    model_path = os.path.join(app_root, "models", "pytorch_model_effb6.bin")
     # Create with 1000 classes to match typical EfficientNet checkpoints
     model = timm.create_model("efficientnet_b6", pretrained=False, num_classes=1000)
     state = torch.load(model_path, map_location=torch.device("cpu"))
@@ -25,6 +30,10 @@ def load_dr_model():
 
 # Preprocess image and make prediction
 def predict_dr_severity(image_path, model):
+    import torch  # lazy import
+    import torchvision.transforms as transforms  # lazy import
+    from PIL import Image  # lazy import
+
     transform = transforms.Compose([
         transforms.Resize((528, 528)),  # EfficientNet-B6 input size
         transforms.ToTensor(),
