@@ -185,6 +185,46 @@ def main():
         model_key = st.session_state.selected_model
         info = MODEL_INFO[model_key]
 
+        # ------------------------------------------------------------------ #
+        #  PATIENT INFO                                                        #
+        # ------------------------------------------------------------------ #
+        if "patient_confirmed" not in st.session_state:
+            st.session_state["patient_confirmed"] = False
+
+        if not st.session_state["patient_confirmed"]:
+            st.subheader("🧑‍⚕️ Patient Details")
+            st.caption("Please enter patient details before uploading an image.")
+            p_name   = st.text_input("Patient Name", placeholder="e.g. Ramesh Kumar", key="input_patient_name")
+            p_age    = st.number_input("Patient Age", min_value=1, max_value=120, value=30, step=1, key="input_patient_age")
+            p_gender = st.selectbox("Gender", ["Male", "Female", "Other"], key="input_patient_gender")
+            if st.button("Confirm Patient", use_container_width=True):
+                if not p_name.strip():
+                    st.error("Please enter the patient's name.")
+                else:
+                    st.session_state["patient_name"]   = p_name.strip()
+                    st.session_state["patient_age"]    = int(p_age)
+                    st.session_state["patient_gender"] = p_gender
+                    st.session_state["patient_confirmed"] = True
+                    st.rerun()
+            return  # block rest of UI until patient is confirmed
+
+        # Patient banner — always visible once confirmed
+        p_name   = st.session_state["patient_name"]
+        p_age    = st.session_state["patient_age"]
+        p_gender = st.session_state["patient_gender"]
+        banner_col, change_col = st.columns([4, 1])
+        with banner_col:
+            st.success(f"👤 Patient: **{p_name}** | Age: **{p_age}** | Gender: **{p_gender}**")
+        with change_col:
+            if st.button("Change Patient", use_container_width=True):
+                st.session_state["patient_confirmed"] = False
+                st.session_state["patient_name"]      = ""
+                st.session_state["patient_age"]       = 0
+                st.session_state["patient_gender"]    = ""
+                st.rerun()
+
+        st.markdown("---")
+
         uploaded = st.file_uploader("Upload fundus image", type=["jpg", "jpeg", "png"], key=f"uploader_{model_key}")
 
         if uploaded is None:
