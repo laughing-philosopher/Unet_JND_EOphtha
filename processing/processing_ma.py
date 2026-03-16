@@ -11,10 +11,11 @@ Img_Channels = 1
 
 import os
 
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))   # .../BTP/processing
-ROOT_DIR = os.path.dirname(CURRENT_DIR)                    # .../BTP
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(CURRENT_DIR)
 model_path = os.path.join(ROOT_DIR, "models", "UNet_JND_EOphtha.h5")
-# Lazy model loader to avoid heavy import-time work (useful for Streamlit)
+
+# Lazy model loader
 _model = None
 def get_model():
     global _model
@@ -24,16 +25,17 @@ def get_model():
     return _model
 
 
-def processing(img, threshold, batch_size):
+def processing(img, threshold, batch_size, progress_callback=None):
+    """
+    progress_callback: optional callable(current_batch, total_batches)
+                       called after each batch so the UI can update a progress bar.
+    """
     model = get_model()
 
     img1 = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-    # The initial processing of the image
     img_g = img1[:, :, 1]
 
-    # Applying CLAHE as pre-processing step
-    clahe = cv2.createCLAHE(clipLimit=8, tileGridSize=(8,8))
+    clahe = cv2.createCLAHE(clipLimit=8, tileGridSize=(8, 8))
     img_c = clahe.apply(img_g)
 
     [m, n] = img_c.shape
@@ -42,8 +44,7 @@ def processing(img, threshold, batch_size):
     gt = gt / 255.0
     gt = (gt > 0.5).astype(np.float32)
 
-    iarr = []
-    jarr = []
+    iarr, jarr = [], []
     step = 8
     for i in range(0, m, step):
         for j in range(0, n, step):
@@ -57,8 +58,6 @@ def processing(img, threshold, batch_size):
         return np.zeros((m, n), dtype=np.float32)
 
     final_res = np.zeros((m, n), dtype=np.float32)
-
-    # compute number of batches robustly
     num_batches = math.ceil(tot / batch_size)
 
     for batch in range(num_batches):
@@ -67,34 +66,33 @@ def processing(img, threshold, batch_size):
         current_batch_size = end - start
 
         patches_img = np.zeros((current_batch_size, Img_Height, Img_Width, 1), dtype=np.float32)
-        patches_gt = np.zeros((current_batch_size, Img_Height, Img_Width, 1), dtype=np.float32)
+        patches_gt  = np.zeros((current_batch_size, Img_Height, Img_Width, 1), dtype=np.float32)
 
         for k in range(current_batch_size):
             itr = start + k
             patch_img = img_c[iarr[itr]:(iarr[itr] + Img_Height), jarr[itr]:(jarr[itr] + Img_Width)]
-            patch_img = np.expand_dims(patch_img, axis=-1)      # (48,48,1)
-            patches_img[k] = patch_img                          # assign (48,48,1)
+            patches_img[k] = np.expand_dims(patch_img, axis=-1)
 
             patch_gt = gt[iarr[itr]:(iarr[itr] + Img_Height), jarr[itr]:(jarr[itr] + Img_Width)]
-            patch_gt = np.expand_dims(patch_gt, axis=-1)
-            patches_gt[k] = patch_gt
+            patches_gt[k] = np.expand_dims(patch_gt, axis=-1)
 
-        print("patches:", patches_img.shape, "start index:", start)
-        inter_res, _ = model.predict([patches_img, patches_gt], verbose=False)
+        inter_res, _ = model.predict([patches_img, patches_gt], verbose=0)
 
         for k in range(current_batch_size):
             itr = start + k
             final_res[iarr[itr]:(iarr[itr] + Img_Height), jarr[itr]:(jarr[itr] + Img_Width)] += np.squeeze(inter_res[k])
 
-        # free memory promptly
         del patches_img, patches_gt, inter_res
 
-    # Safely normalize (avoid divide by zero)
+        # Fire progress callback if provided
+        if progress_callback is not None:
+            progress_callback(batch + 1, num_batches)
+
     mx = np.max(final_res)
     if mx <= 0:
-        psm_th2 = np.zeros_like(final_res)
-    else:
-        psm_th2 = final_res / mx
-        psm_th2 = (psm_th2 > 0.1).astype(float)
+        return np.zeros_like(final_res)
+
+    psm_th2 = final_res / mx
+    psm_th2 = (psm_th2 > 0.1).astype(float)
 
     return psm_th2
