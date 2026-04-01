@@ -1,6 +1,32 @@
+# Virtual environments
 env
 venv
+.venv
+
+# Cache
 __pycache__
+*.pyc
+*.pyo
+
+# Jupyter
 test.ipynb
+*.ipynb
+
+# Test files
 test.py
-test.ipynb
+
+# Large model files (too big for GitHub)
+models/*.h5
+models/*.bin
+models/*.pt
+models/*.pth
+
+# Portable Python (for USB distribution)
+python/
+
+# Auth data (local only)
+users.json
+
+# OS files
+.DS_Store
+Thumbs.db
