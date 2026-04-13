@@ -110,31 +110,25 @@ MODEL_INFO = {
 }
 
 
-def set_selected(model_key: str):
-    # Clear stale report when switching models
-    st.session_state.pop("last_report", None)
-    st.session_state.selected_model = model_key
-    st.session_state.sidebar_run_click = True
-
-def _render_report_button(user: dict, model_key: str, image_cv2: np.ndarray) -> None:
-    """Render the Generate Report button and download widget."""
+def _render_report_button(user: dict, image_cv2: np.ndarray) -> None:
+    """Render the Generate Report button and download widget (all models combined)."""
     report_data = st.session_state.get("last_report")
     if not report_data:
         return
     st.markdown("---")
-    if st.button("📄 Generate Report", use_container_width=True, key=f"report_btn_{model_key}"):
+    if st.button("📄 Generate Report", use_container_width=True, key="report_btn_all"):
         with st.spinner("Building PDF report ..."):
             pdf_bytes = generate_report(
                 patient_name   = st.session_state.get("patient_name", "Unknown"),
                 patient_age    = st.session_state.get("patient_age", 0),
                 patient_gender = st.session_state.get("patient_gender", "—"),
                 doctor_name    = st.session_state.get("full_name", user["username"]),
-                model_title    = MODEL_INFO[model_key]["title"],
+                model_title    = "Full Retinal Analysis (All Models)",
                 input_image    = report_data["input"],
                 output_images  = report_data["outputs"],
             )
         patient_name = st.session_state.get("patient_name", "patient").replace(" ", "_")
-        filename = f"Aakhi_Report_{patient_name}_{model_key}.pdf"
+        filename = f"Aakhi_Report_{patient_name}_AllModels.pdf"
         st.download_button(
             label="⬇️ Download Report PDF",
             data=pdf_bytes,
@@ -164,11 +158,7 @@ def main():
         st.markdown("</div>", unsafe_allow_html=True)
         st.stop()
 
-    if "selected_model" not in st.session_state:
-        st.session_state.selected_model = "MA"
-    if "sidebar_run_click" not in st.session_state:
-        st.session_state.sidebar_run_click = False
-        
+
     if "lang_code" not in st.session_state:
         st.session_state["lang_code"] = "en"  # Default to English
 
@@ -240,22 +230,7 @@ def main():
                 logout()
                 st.rerun()
 
-        st.markdown("---")
-        st.markdown("## Models")
-        if st.button("Microaneurysm (MA)"):
-            set_selected("MA")
-        if st.button("OD - OC Segmentation (ODOC)"):
-            set_selected("ODOC")
-        if st.button("DR Grading"):
-            set_selected("DRG")
-        if st.button("Multi-Lesion Detector (IDRiD)"):
-            set_selected("LESION")
 
-        st.markdown("---")
-        st.markdown("### Quick info")
-        info = MODEL_INFO[st.session_state.selected_model]
-        st.write("Selected model:", info["title"])
-        st.markdown(info["notes"])
 
     # ------------------------------------------------------------------ #
     #  HEADER                                                              #
@@ -286,24 +261,11 @@ def main():
             </div>
         """, unsafe_allow_html=True)
 
-    st.markdown(f"<div style='text-align: center;'><b>{t('active_model')}</b> {MODEL_INFO[st.session_state.selected_model]['title']}</div>", unsafe_allow_html=True)
     st.markdown("---")
 
-    main_col, info_col = st.columns([3, 1])
-
-    with info_col:
-        info = MODEL_INFO[st.session_state.selected_model]
-        st.header(info["title"])
-        st.write("**Description:**")
-        st.write(info["description"])
-
-        st.write("**Notes:**")
-        st.write(info["notes"])
+    main_col = st.container()
 
     with main_col:
-        model_key = st.session_state.selected_model
-        info = MODEL_INFO[model_key]
-
         # ------------------------------------------------------------------ #
         #  PATIENT INFO                                                        #
         # ------------------------------------------------------------------ #
@@ -324,7 +286,7 @@ def main():
                     st.session_state["patient_age"]     = int(p_age)
                     st.session_state["patient_gender"]  = p_gender
                     st.session_state["patient_confirmed"] = True
-                    st.session_state.pop("last_report", None)  # clear any stale report
+                    st.session_state.pop("last_report", None)
                     st.rerun()
             return
 
@@ -341,95 +303,71 @@ def main():
                 st.session_state["patient_name"]      = ""
                 st.session_state["patient_age"]       = 0
                 st.session_state["patient_gender"]    = ""
-                st.session_state.pop("last_report", None)  # clear stale report
+                st.session_state.pop("last_report", None)
                 st.rerun()
 
         st.markdown("---")
 
-        uploaded = st.file_uploader("Upload fundus image", type=["jpg", "jpeg", "png"], key=f"uploader_{model_key}")
+        uploaded = st.file_uploader("Upload fundus image", type=["jpg", "jpeg", "png"], key="uploader_main")
 
         if uploaded is None:
-            st.info("Please upload an image to run the selected model.")
-            st.session_state.sidebar_run_click = False
+            st.info("Please upload a fundus image to begin analysis.")
             return
 
         image_pil = Image.open(uploaded).convert("RGB")
         image_cv2 = np.array(image_pil)
 
-        st.subheader("Input image")
+        st.subheader("Input Image")
         st.image(image_cv2, use_container_width=True)
 
-        # --- DRG ---
-        if model_key == "DRG":
-            run_now = st.button("Run DR Grading", key=f"run_{model_key}")
-            if run_now:
-                if "dr_model" not in st.session_state:
-                    st.session_state.dr_model = None
-                if st.session_state.dr_model is None:
-                    with st.spinner("Loading DR Grading model ..."):
-                        try:
-                            st.session_state.dr_model = load_dr_model()
-                        except Exception as e:
-                            st.error(f"Failed to load DR model: {e}")
-                            return
-                try:
-                    import tempfile
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                        image_pil.save(tmp.name)
-                        tmp_name = tmp.name
-                    with st.spinner("Predicting DR severity ..."):
-                        sev = predict_dr_severity(tmp_name, st.session_state.dr_model)
-                    st.success(f"Predicted DR Severity: {sev}")
+        analyze_btn = st.button("🔍 Analyze", use_container_width=True)
 
-                    # Build a readable severity image for the report
-                    sev_img = Image.new("RGB", (600, 100), color=(255, 255, 255))
-                    d = ImageDraw.Draw(sev_img)
-                    try:
-                        font = ImageFont.truetype("arial.ttf", 36)
-                    except Exception:
-                        font = ImageFont.load_default()
-                    d.text((20, 28), f"DR Severity: {sev}", fill=(30, 80, 150), font=font)
-                    sev_np = np.array(sev_img)
+        if analyze_btn:
+            all_outputs = []  # list of (label, image_np) for the report
 
-                    st.session_state["last_report"] = {
-                        "input": image_cv2.copy(),
-                        "outputs": [("DR Grading Result", sev_np)],
-                    }
-                    if os.path.exists(tmp_name):
-                        os.unlink(tmp_name)
-                except Exception as e:
-                    st.error(f"DR Grading failed: {e}")
-                    if 'tmp_name' in locals() and os.path.exists(tmp_name):
-                        os.unlink(tmp_name)
-
-            if "last_report" in st.session_state:
-                _render_report_button(user, model_key, image_cv2)
-            return  # DRG path ends here
-
-        # --- MA / ODOC / LESION ---
-        thr = float(info["recommended_threshold"])
-        batch = int(info["recommended_batch"])
-
-        # Colour legend for LESION model
-        if info.get("color_output") and model_key == "LESION":
-            st.markdown(
-                "**Colour key:** "
-                "🔴 Hard Exudates &nbsp;&nbsp; 🟢 Hemorrhages &nbsp;&nbsp; "
-                "🔵 Microaneurysms &nbsp;&nbsp; 🟡 Soft Exudates"
-            )
-
-        run_now = st.button("Run model on uploaded image", key=f"run_{model_key}")
-
-        if run_now:
-            if info["module"] is None or not hasattr(info["module"], "processing"):
-                st.error("Processing module not available.")
-                return
-            processing_fn = getattr(info["module"], "processing")
-
+            # ------------------------------------------------------------------ #
+            #  DR GRADING                                                         #
+            # ------------------------------------------------------------------ #
+            st.markdown("---")
+            st.subheader("DR Grading")
             try:
-                # MA: show patch-level progress bar
-                if model_key == "MA":
-                    progress_bar = st.progress(0, text="Starting inference...")
+                if "dr_model" not in st.session_state or st.session_state.dr_model is None:
+                    with st.spinner("Loading DR Grading model ..."):
+                        st.session_state.dr_model = load_dr_model()
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                    image_pil.save(tmp.name)
+                    tmp_name = tmp.name
+                with st.spinner("Predicting DR severity ..."):
+                    sev = predict_dr_severity(tmp_name, st.session_state.dr_model)
+                st.success(f"Predicted DR Severity: **{sev}**")
+                if os.path.exists(tmp_name):
+                    os.unlink(tmp_name)
+
+                sev_img = Image.new("RGB", (600, 100), color=(255, 255, 255))
+                d = ImageDraw.Draw(sev_img)
+                try:
+                    font = ImageFont.truetype("arial.ttf", 36)
+                except Exception:
+                    font = ImageFont.load_default()
+                d.text((20, 28), f"DR Severity: {sev}", fill=(30, 80, 150), font=font)
+                all_outputs.append(("DR Grading Result", np.array(sev_img)))
+            except Exception as e:
+                st.error(f"DR Grading failed: {e}")
+
+            # ------------------------------------------------------------------ #
+            #  MICROANEURYSM (MA)                                                 #
+            # ------------------------------------------------------------------ #
+            st.markdown("---")
+            st.subheader("Microaneurysm Detector (MA)")
+            info_ma = MODEL_INFO["MA"]
+            if info_ma["module"] is None or not hasattr(info_ma["module"], "processing"):
+                st.warning("MA processing module not available.")
+            else:
+                try:
+                    thr_ma   = float(info_ma["recommended_threshold"])
+                    batch_ma = int(info_ma["recommended_batch"])
+                    progress_bar = st.progress(0, text="Starting MA inference...")
                     status_text  = st.empty()
 
                     def ma_progress(current, total):
@@ -437,117 +375,122 @@ def main():
                         progress_bar.progress(pct, text=f"Processing patches... batch {current}/{total}")
                         status_text.caption(f"{int(pct * 100)}% complete")
 
-                    result = processing_fn(image_cv2, float(thr), int(batch), progress_callback=ma_progress)
+                    result_ma = info_ma["module"].processing(image_cv2, thr_ma, batch_ma, progress_callback=ma_progress)
                     progress_bar.progress(1.0, text="Done!")
                     status_text.empty()
                     progress_bar.empty()
-                
-                # ODOC: Handles dual return (mask, cdr)
-                elif model_key == "ODOC":
-                    with st.spinner(f"Running {info['title']} ..."):
-                        color_img, cdr_value = processing_fn(image_cv2, float(thr), int(batch))
 
-                # All other models: simple spinner
-                else:
-                    with st.spinner(f"Running {info['title']} ..."):
-                        result = processing_fn(image_cv2, float(thr), int(batch))
-
-                # -------------------------------------------------------- #
-                #  Branch A: colour-coded RGB output (LESION, ODOC)        #
-                # -------------------------------------------------------- #
-                if info.get("color_output"):
-                    
-                    # ⚠️ THIS IS THE CRITICAL FIX: Skip np.array for ODOC
-                    if model_key != "ODOC":
-                        color_img = np.array(result, dtype=np.uint8)
-
-                    # Side-by-side: original | segmentation
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        st.subheader("Input image")
-                        st.image(image_cv2, use_container_width=True)
-                    with col_b:
-                        st.subheader("Segmentation output")
-                        st.image(color_img, use_container_width=True)
-
-                    # Blend overlay (50 % alpha)
-                    blend = cv2.addWeighted(image_cv2, 0.55, color_img, 0.45, 0)
-                    st.subheader("Blended overlay")
-                    st.image(blend, use_container_width=True)
-                    
-                    # Display CDR and Glaucoma Warning for ODOC
-                    if model_key == "ODOC":
-                        st.markdown("---")
-                        st.metric("Vertical Cup-to-Disc Ratio (vCDR)", f"{cdr_value:.3f}")
-                        
-                        if cdr_value > 0.65:
-                            st.error(f"⚠️ Warning: CDR is {cdr_value:.3f}. This patient might have signs of Glaucoma. Please consult an ophthalmologist.")
-                        else:
-                            st.success(f"CDR is {cdr_value:.3f}. Ratio is within the normal range.")
-
-                    st.session_state["last_report"] = {
-                        "input": image_cv2.copy(),
-                        "outputs": [
-                            (f"{info['title']} — Segmentation", color_img),
-                            (f"{info['title']} — Overlay",      blend),
-                        ],
-                    }
-                    
-                    if model_key == "ODOC":
-                         st.session_state["last_report"]["outputs"].append(
-                            (f"Clinical Finding: CDR {cdr_value:.3f}", color_img)
-                        )
-
-                # -------------------------------------------------------- #
-                #  Branch B: mask / probability output (MA)                #
-                # -------------------------------------------------------- #
-                else:
-                    if isinstance(result, (float, int)):
-                        st.success(f"Model score / probability: {float(result):.4f}")
-                        return
-
-                    mask = np.array(result)
+                    mask = np.array(result_ma)
                     if mask.ndim == 3 and mask.shape[-1] == 1:
                         mask = mask[..., 0]
                     mask = mask.astype(np.float32)
-
                     disp    = (mask * 255.0).clip(0, 255).astype(np.uint8)
                     overlay = overlay_mask_on_rgb(image_cv2, mask > 0)
 
-                    st.subheader("Model output (mask / probability map)")
-                    st.image(disp, caption="Model output (0-255)", use_container_width=True)
-                    st.subheader("Overlay (green marks)")
-                    st.image(overlay, use_container_width=True)
+                    binary_mask = (mask > 0).astype(np.uint8) * 255
+                    kernel   = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
+                    dilated  = cv2.dilate(binary_mask, kernel, iterations=2)
+                    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    circled  = image_cv2.copy()
+                    for cnt in contours:
+                        (cx, cy), radius = cv2.minEnclosingCircle(cnt)
+                        radius = max(int(radius), 10)
+                        cv2.circle(circled, (int(cx), int(cy)), radius, (255, 0, 0), 2)
 
-                    output_images = [
-                        ("Model Output Mask",    disp),
-                        ("Overlay (green marks)", overlay),
-                    ]
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.image(disp, caption="Probability map (0–255)", use_container_width=True)
+                    with col_b:
+                        st.image(overlay, caption="Green overlay", use_container_width=True)
+                    st.image(circled, caption=f"MA clusters — {len(contours)} cluster(s) found (red circles)", use_container_width=True)
 
-                    if model_key == "MA":
-                        binary_mask = (mask > 0).astype(np.uint8) * 255
-                        kernel   = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
-                        dilated  = cv2.dilate(binary_mask, kernel, iterations=2)
-                        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                        circled  = image_cv2.copy()
-                        for cnt in contours:
-                            (cx, cy), radius = cv2.minEnclosingCircle(cnt)
-                            radius = max(int(radius), 10)
-                            cv2.circle(circled, (int(cx), int(cy)), radius, (255, 0, 0), 2)
-                        st.subheader(f"Detected MA regions — {len(contours)} cluster(s) found")
-                        st.image(circled, caption="Red circles = MA clusters", use_container_width=True)
-                        output_images.append((f"MA Clusters ({len(contours)} detected)", circled))
+                    all_outputs.extend([
+                        ("MA — Probability Map", disp),
+                        ("MA — Overlay", overlay),
+                        (f"MA — Clusters ({len(contours)} detected)", circled),
+                    ])
+                except Exception as e:
+                    st.error(f"MA inference failed: {e}")
 
-                    st.session_state["last_report"] = {
-                        "input": image_cv2.copy(),
-                        "outputs": output_images,
-                    }
+            # ------------------------------------------------------------------ #
+            #  OD-OC SEGMENTATION                                                 #
+            # ------------------------------------------------------------------ #
+            st.markdown("---")
+            st.subheader("Optic Disc / Optic Cup (OD-OC) Segmentation")
+            info_od = MODEL_INFO["ODOC"]
+            if info_od["module"] is None or not hasattr(info_od["module"], "processing"):
+                st.warning("ODOC processing module not available.")
+            else:
+                try:
+                    thr_od   = float(info_od["recommended_threshold"])
+                    batch_od = int(info_od["recommended_batch"])
+                    with st.spinner("Running OD-OC segmentation ..."):
+                        color_img_od, cdr_value = info_od["module"].processing(image_cv2, thr_od, batch_od)
+                    blend_od = cv2.addWeighted(image_cv2, 0.55, color_img_od, 0.45, 0)
 
-            except Exception as e:
-                st.error(f"Model inference failed: {e}")
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.image(color_img_od, caption="OD-OC Segmentation", use_container_width=True)
+                    with col_b:
+                        st.image(blend_od, caption="Blended overlay", use_container_width=True)
 
-        if "last_report" in st.session_state and model_key in ("MA", "ODOC", "LESION"):
-            _render_report_button(user, model_key, image_cv2)
+                    st.metric("Vertical Cup-to-Disc Ratio (vCDR)", f"{cdr_value:.3f}")
+                    if cdr_value > 0.65:
+                        st.error(f"⚠️ CDR is {cdr_value:.3f} — possible signs of Glaucoma. Please consult an ophthalmologist.")
+                    else:
+                        st.success(f"CDR is {cdr_value:.3f} — within normal range.")
+
+                    all_outputs.extend([
+                        ("OD-OC — Segmentation", color_img_od),
+                        ("OD-OC — Overlay", blend_od),
+                        (f"OD-OC — CDR {cdr_value:.3f}", color_img_od),
+                    ])
+                except Exception as e:
+                    st.error(f"OD-OC inference failed: {e}")
+
+            # ------------------------------------------------------------------ #
+            #  MULTI-LESION DETECTOR                                              #
+            # ------------------------------------------------------------------ #
+            st.markdown("---")
+            st.subheader("Multi-Lesion Detector (IDRiD / FIAM)")
+            st.markdown(
+                "**Colour key:** "
+                "🔴 Hard Exudates &nbsp;&nbsp; 🟢 Hemorrhages &nbsp;&nbsp; "
+                "🔵 Microaneurysms &nbsp;&nbsp; 🟡 Soft Exudates"
+            )
+            info_lesion = MODEL_INFO["LESION"]
+            if info_lesion["module"] is None or not hasattr(info_lesion["module"], "processing"):
+                st.warning("Multi-Lesion processing module not available.")
+            else:
+                try:
+                    thr_l   = float(info_lesion["recommended_threshold"])
+                    batch_l = int(info_lesion["recommended_batch"])
+                    with st.spinner("Running Multi-Lesion detection ..."):
+                        result_lesion = info_lesion["module"].processing(image_cv2, thr_l, batch_l)
+                    color_img_l = np.array(result_lesion, dtype=np.uint8)
+                    blend_l = cv2.addWeighted(image_cv2, 0.55, color_img_l, 0.45, 0)
+
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.image(color_img_l, caption="Lesion segmentation", use_container_width=True)
+                    with col_b:
+                        st.image(blend_l, caption="Blended overlay", use_container_width=True)
+
+                    all_outputs.extend([
+                        ("Lesion — Segmentation", color_img_l),
+                        ("Lesion — Overlay", blend_l),
+                    ])
+                except Exception as e:
+                    st.error(f"Multi-Lesion inference failed: {e}")
+
+            # Save combined report data
+            st.session_state["last_report"] = {
+                "input": image_cv2.copy(),
+                "outputs": all_outputs,
+            }
+
+        if "last_report" in st.session_state:
+            _render_report_button(user, image_cv2)
 
     st.markdown("---")
     st.caption("Tip: Place modules under ./processing and models under ./models.")
