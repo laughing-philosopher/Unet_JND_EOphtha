@@ -4,9 +4,11 @@ import numpy as np
 import cv2
 import os
 import sys
+import base64
 
 from auth import show_auth_screen, is_logged_in, logout, current_user
 from report import generate_report
+from translations import LANGUAGES, get_text
 
 # --- set_page_config MUST be first Streamlit call ---
 st.set_page_config(layout="wide", page_title="Aakhi")
@@ -16,6 +18,10 @@ def get_path(filename):
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, filename)
     return filename
+
+def get_base64_image(image_path):
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
 
 try:
     import processing.processing_ma as proc_ma
@@ -29,11 +35,6 @@ except Exception as e:
     proc_od = None
     print("OD-OC processing module not found:", e)
 
-try:
-    import processing.processing_odoc2 as proc_odoc2
-except Exception as e:
-    proc_odoc2 = None
-    print("OD-OC v2 (FIAM) processing module not found:", e)
 
 try:
     import processing.processing_lesion as proc_lesion
@@ -74,7 +75,7 @@ MODEL_INFO = {
         "recommended_threshold": 0.5,
         "recommended_batch": 8,
         "notes": "Module should expose processing(image, threshold, batch_size).",
-        "color_output": False,
+        "color_output": True, # <--- CHANGE THIS TO True
     },
     "DRG": {
         "title": "DR Grading",
@@ -87,23 +88,6 @@ MODEL_INFO = {
         "recommended_batch": None,
         "notes": "Loads EfficientNet-B6 weights from models/pytorch_model_effb6.bin.",
         "color_output": False,
-    },
-    "ODOC2": {
-        "title": "OD-OC Segmentation v2 (UNet + FIAM)",
-        "module": proc_odoc2,
-        "description": (
-            "Segments optic disc and optic cup using a UNet with the FIAM attention module. "
-            "Input: RGB fundus image. "
-            "Output: colour-coded overlay — Green = Optic Disc, Blue = Optic Cup."
-        ),
-        "recommended_threshold": 0.5,
-        "recommended_batch": 4,
-        "notes": (
-            "Model: UNet+FIAM_1.2_0back_newformula.h5  |  "
-            "Built on Python 3.11.9 / TF 2.15. "
-            "Returns a colour-coded RGB image directly."
-        ),
-        "color_output": True,
     },
     "LESION": {
         "title": "Multi-Lesion Detector (IDRiD / FIAM)",
@@ -131,7 +115,6 @@ def set_selected(model_key: str):
     st.session_state.pop("last_report", None)
     st.session_state.selected_model = model_key
     st.session_state.sidebar_run_click = True
-
 
 def _render_report_button(user: dict, model_key: str, image_cv2: np.ndarray) -> None:
     """Render the Generate Report button and download widget."""
@@ -185,13 +168,65 @@ def main():
         st.session_state.selected_model = "MA"
     if "sidebar_run_click" not in st.session_state:
         st.session_state.sidebar_run_click = False
+        
+    if "lang_code" not in st.session_state:
+        st.session_state["lang_code"] = "en"  # Default to English
 
     user = st.session_state.get("guest_user") if st.session_state.get("guest_mode") else current_user()
+
+    # --- CUSTOM CSS FOR BUTTONS AND UI ---
+    st.markdown("""
+        <style>
+        /* Style all standard Streamlit buttons to match the mockup */
+        div.stButton > button:first-child, div.stDownloadButton > button:first-child {
+            background-color: #1c4b82;
+            background-image: linear-gradient(to bottom, #2a62a3, #163e6e);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 24px;
+            font-weight: bold;
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.2);
+            width: 100%;
+        }
+        /* Hover effect for buttons */
+        div.stButton > button:first-child:hover, div.stDownloadButton > button:first-child:hover {
+            background-image: linear-gradient(to bottom, #3474bc, #1c4b82);
+            border-color: #1c4b82;
+            color: white;
+        }
+        /* Make the file uploader look cleaner */
+        section[data-testid="stFileUploadDropzone"] {
+            background-color: #f0f4f8;
+            border: 2px dashed #2a62a3;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    if "lang_code" not in st.session_state:
+        st.session_state["lang_code"] = "en"  # Default to English
+        
+    # Add this line right here, before your Sidebar and Header code!
+    t = lambda key: get_text(st.session_state["lang_code"], key)
 
     # ------------------------------------------------------------------ #
     #  SIDEBAR                                                             #
     # ------------------------------------------------------------------ #
     with st.sidebar:
+        # --- Language Selector ---
+        selected_lang_name = st.selectbox(
+            "🌐 Select Language / भाषा चुनें", 
+            options=list(LANGUAGES.keys()),
+            index=list(LANGUAGES.values()).index(st.session_state["lang_code"])
+        )
+        
+        # Update session state if changed
+        new_lang_code = LANGUAGES[selected_lang_name]
+        if new_lang_code != st.session_state["lang_code"]:
+            st.session_state["lang_code"] = new_lang_code
+            st.rerun()
+            
+        st.markdown("---")
         if st.session_state.get("guest_mode"):
             st.markdown("👤 **Guest User**")
             st.caption("*Browsing as guest*")
@@ -214,8 +249,6 @@ def main():
             set_selected("ODOC")
         if st.button("DR Grading"):
             set_selected("DRG")
-        if st.button("OD-OC v2 — UNet+FIAM"):
-            set_selected("ODOC2")
         if st.button("Multi-Lesion Detector (IDRiD)"):
             set_selected("LESION")
 
@@ -228,16 +261,33 @@ def main():
     # ------------------------------------------------------------------ #
     #  HEADER                                                              #
     # ------------------------------------------------------------------ #
-    col_left, col_right = st.columns([3, 1])
-    with col_left:
-        st.title("Aakhi")
-        st.subheader("Retinal Image Analysis")
-        st.markdown(f"**Active model:** {MODEL_INFO[st.session_state.selected_model]['title']}")
-    with col_right:
-        logo_path = get_path("iitbbs logo.png")
-        if os.path.exists(logo_path):
-            st.image(Image.open(logo_path), width=200)
+    logo_path = get_path("aakhi_logo.png") # Make sure this filename is correct
+    
+    if os.path.exists(logo_path):
+        img_base64 = get_base64_image(logo_path)
+        
+        # This HTML puts the logo right next to the "AAKHI" text and centers everything perfectly
+        st.markdown(f"""
+            <div style='text-align: center; padding-bottom: 10px;'>
+                <div style='display: inline-flex; align-items: center; justify-content: center;'>
+                    <img src='data:image/png;base64,{img_base64}' style='width: 120px; margin-right: 15px;'>
+                    <h1 style='color: #1c4b82; font-size: 3.5em; margin: 0; font-weight: bold;'>{t("app_title")}</h1>
+                </div>
+                <h3 style='color: #333; margin-top: 10px; font-weight: 600;'>{t("app_subtitle")}</h3>
+                <h4 style='color: #555; font-style: italic; margin-top: 5px;'>{t("app_motto")}</h4>
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Fallback if logo is missing
+        st.markdown(f"""
+            <div style='text-align: center; padding-bottom: 10px;'>
+                <h1 style='color: #1c4b82; font-size: 3.5em; margin-bottom: 0; font-weight: bold;'>{t("app_title")}</h1>
+                <h3 style='color: #333; margin-top: 5px; font-weight: 600;'>{t("app_subtitle")}</h3>
+                <h4 style='color: #555; font-style: italic; margin-top: 5px;'>{t("app_motto")}</h4>
+            </div>
+        """, unsafe_allow_html=True)
 
+    st.markdown(f"<div style='text-align: center;'><b>{t('active_model')}</b> {MODEL_INFO[st.session_state.selected_model]['title']}</div>", unsafe_allow_html=True)
     st.markdown("---")
 
     main_col, info_col = st.columns([3, 1])
@@ -268,8 +318,8 @@ def main():
         if not st.session_state["patient_confirmed"]:
             st.subheader("🧑‍⚕️ Patient Details")
             st.caption("Please enter patient details before uploading an image.")
-            p_name   = st.text_input("Patient Name", placeholder="e.g. Ramesh Kumar", key="input_patient_name")
-            p_age    = st.number_input("Patient Age", min_value=1, max_value=120, value=30, step=1, key="input_patient_age")
+            p_name   = st.text_input("Patient Name", placeholder="e.g. Rachit Jain", key="input_patient_name")
+            p_age    = st.number_input("Patient Age", min_value=1, max_value=120, value=22, step=1, key="input_patient_age")
             p_gender = st.selectbox("Gender", ["Male", "Female", "Other"], key="input_patient_gender")
             if st.button("Confirm Patient", use_container_width=True):
                 if not p_name.strip():
@@ -312,7 +362,7 @@ def main():
         image_cv2 = np.array(image_pil)
 
         st.subheader("Input image")
-        st.image(image_cv2, use_column_width=True)
+        st.image(image_cv2, use_container_width=True)
 
         # --- DRG ---
         if model_key == "DRG":
@@ -361,7 +411,7 @@ def main():
                 _render_report_button(user, model_key, image_cv2)
             return  # DRG path ends here
 
-        # --- MA / ODOC / ODOC2 / LESION ---
+        # --- MA / ODOC / LESION ---
         thr = st.number_input(
             "Threshold (probability cutoff)",
             min_value=0.0, max_value=1.0,
@@ -377,19 +427,13 @@ def main():
             key=f"batch_input_{model_key}",
         )
 
-        # Colour legend for models that return colour-coded RGB images
-        if info.get("color_output"):
-            if model_key == "ODOC2":
-                st.markdown(
-                    "**Colour key:** "
-                    "🟢 Optic Disc &nbsp;&nbsp; 🔵 Optic Cup"
-                )
-            elif model_key == "LESION":
-                st.markdown(
-                    "**Colour key:** "
-                    "🔴 Hard Exudates &nbsp;&nbsp; 🟢 Hemorrhages &nbsp;&nbsp; "
-                    "🔵 Microaneurysms &nbsp;&nbsp; 🟡 Soft Exudates"
-                )
+        # Colour legend for LESION model
+        if info.get("color_output") and model_key == "LESION":
+            st.markdown(
+                "**Colour key:** "
+                "🔴 Hard Exudates &nbsp;&nbsp; 🟢 Hemorrhages &nbsp;&nbsp; "
+                "🔵 Microaneurysms &nbsp;&nbsp; 🟡 Soft Exudates"
+            )
 
         run_now = st.button("Run model on uploaded image", key=f"run_{model_key}")
 
@@ -421,7 +465,7 @@ def main():
                         result = processing_fn(image_cv2, float(thr), int(batch))
 
                 # -------------------------------------------------------- #
-                #  Branch A: colour-coded RGB output (ODOC2, LESION)        #
+                #  Branch A: colour-coded RGB output (LESION)              #
                 # -------------------------------------------------------- #
                 if info.get("color_output"):
                     color_img = np.array(result, dtype=np.uint8)
@@ -430,15 +474,15 @@ def main():
                     col_a, col_b = st.columns(2)
                     with col_a:
                         st.subheader("Input image")
-                        st.image(image_cv2, use_column_width=True)
+                        st.image(image_cv2, use_container_width=True)
                     with col_b:
                         st.subheader("Segmentation output")
-                        st.image(color_img, use_column_width=True)
+                        st.image(color_img, use_container_width=True)
 
                     # Blend overlay (50 % alpha)
                     blend = cv2.addWeighted(image_cv2, 0.55, color_img, 0.45, 0)
                     st.subheader("Blended overlay")
-                    st.image(blend, use_column_width=True)
+                    st.image(blend, use_container_width=True)
 
                     st.session_state["last_report"] = {
                         "input": image_cv2.copy(),
@@ -465,9 +509,9 @@ def main():
                     overlay = overlay_mask_on_rgb(image_cv2, mask > 0)
 
                     st.subheader("Model output (mask / probability map)")
-                    st.image(disp, caption="Model output (0-255)", use_column_width=True)
+                    st.image(disp, caption="Model output (0-255)", use_container_width=True)
                     st.subheader("Overlay (green marks)")
-                    st.image(overlay, use_column_width=True)
+                    st.image(overlay, use_container_width=True)
 
                     output_images = [
                         ("Model Output Mask",    disp),
@@ -485,7 +529,7 @@ def main():
                             radius = max(int(radius), 10)
                             cv2.circle(circled, (int(cx), int(cy)), radius, (255, 0, 0), 2)
                         st.subheader(f"Detected MA regions — {len(contours)} cluster(s) found")
-                        st.image(circled, caption="Red circles = MA clusters", use_column_width=True)
+                        st.image(circled, caption="Red circles = MA clusters", use_container_width=True)
                         output_images.append((f"MA Clusters ({len(contours)} detected)", circled))
 
                     st.session_state["last_report"] = {
@@ -496,7 +540,7 @@ def main():
             except Exception as e:
                 st.error(f"Model inference failed: {e}")
 
-        if "last_report" in st.session_state and model_key in ("MA", "ODOC", "ODOC2", "LESION"):
+        if "last_report" in st.session_state and model_key in ("MA", "ODOC", "LESION"):
             _render_report_button(user, model_key, image_cv2)
 
     st.markdown("---")

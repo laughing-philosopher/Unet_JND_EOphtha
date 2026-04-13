@@ -1,38 +1,93 @@
-# processing/processing_odoc.py
-
-import cv2
-import numpy as np
 import os
+import cv2
+import torch
+import numpy as np
+import segmentation_models_pytorch as smp
 
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(CURRENT_DIR)
-model_path = os.path.join(ROOT_DIR, "models", "retinet_9010.h5")
+# ==========================================
+# CONFIGURATION
+# ==========================================
+# Ensure this path matches where your model is actually stored relative to app.py
+MODEL_PATH = os.path.join("models", "best_unet_refuge2.pth")
 
-# Lazy model loader — only loads when first needed, not at import time
+IMG_SIZE = 512
+MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+
+# Global model variable to cache the model in memory (prevents reloading on every click)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _model = None
+
 def get_model():
+    """Loads and caches the model."""
     global _model
     if _model is None:
-        import tensorflow as tf
-        _model = tf.keras.models.load_model(model_path)
+        _model = smp.Unet(
+            encoder_name="resnet34",
+            encoder_weights=None,
+            in_channels=3,
+            classes=3,
+            activation=None,  # We apply softmax manually below
+        )
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(f"ODOC Model not found at: {MODEL_PATH}")
+            
+        state = torch.load(MODEL_PATH, map_location=device)
+        _model.load_state_dict(state)
+        _model.to(device)
+        _model.eval()
     return _model
 
+def to_probs(arr, axis=0):
+    """Applies softmax along the specified axis to convert raw logits to probabilities."""
+    exp = np.exp(arr - np.max(arr, axis=axis, keepdims=True))
+    return exp / (exp.sum(axis=axis, keepdims=True) + 1e-8)
 
-def processing(image_cv2, threshold, batch_size):
+def processing(image_rgb, threshold=0.5, batch_size=8):
     """
-    OD-OC segmentation processing function.
+    Main inference function called by app.py.
+    
+    Args:
+        image_rgb: NumPy array of the fundus image in RGB format (from Streamlit/PIL).
+        threshold: Float probability cutoff.
+        batch_size: Ignored for single image inference, kept for signature compatibility.
+        
+    Returns:
+        NumPy array (RGB) representing the color-coded mask, sized to the original image.
     """
-    model = get_model()
+    orig_h, orig_w = image_rgb.shape[:2]
+    
+    # 1. Preprocess (No BGR2RGB needed, app.py already provides RGB)
+    img_resized = cv2.resize(image_rgb, (IMG_SIZE, IMG_SIZE)).astype(np.float32) / 255.0
+    img_norm = (img_resized - MEAN) / STD
+    
+    # Convert to PyTorch tensor shape (Batch, Channels, Height, Width)
+    img_t = torch.from_numpy(img_norm.transpose(2, 0, 1)).unsqueeze(0).to(device)
 
-    small = cv2.resize(image_cv2, (0, 0), fx=0.33, fy=0.33)
-    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    # 2. Inference
+    net = get_model()
+    with torch.no_grad():
+        logits = net(img_t)
+        
+    # Remove batch dimension and move to CPU
+    out_np = logits.squeeze().cpu().numpy()
 
-    mask_small = (gray > 128).astype(np.uint8)
+    # 3. Softmax & Thresholding
+    probs = to_probs(out_np, axis=0)
+    p_od = probs[1]
+    p_oc = probs[2]
 
-    mask_full = cv2.resize(
-        mask_small,
-        (image_cv2.shape[1], image_cv2.shape[0]),
-        interpolation=cv2.INTER_NEAREST
-    )
+    pred = np.zeros((IMG_SIZE, IMG_SIZE), dtype=np.uint8)
+    pred[p_od >= threshold] = 1   # Optic Disc (OD)
+    pred[p_oc >= threshold] = 2   # Optic Cup (OC) overrides OD if overlapping
 
-    return mask_full
+    # 4. Color Mapping
+    color_mask = np.zeros((IMG_SIZE, IMG_SIZE, 3), dtype=np.uint8)
+    color_mask[pred == 1] = (0, 255, 0)   # Green — Optic Disc
+    color_mask[pred == 2] = (255, 0, 0)   # Red   — Optic Cup
+
+    # 5. Resize back to original image dimensions
+    # This is critical! app.py does cv2.addWeighted, so shapes MUST match exactly.
+    color_mask_resized = cv2.resize(color_mask, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
+
+    return color_mask_resized

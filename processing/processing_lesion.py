@@ -163,7 +163,7 @@ class FIAM(tf.keras.layers.Layer):
 #  Lazy model loader (singleton)                                     #
 # ------------------------------------------------------------------ #
 _model = None
-MODEL_FILENAME = os.path.join('models', 'Unet+FIAM_IDriD_1.2_300_cad.h5')
+MODEL_FILENAME = os.path.join('models', 'Unet+FIAM_IDriD_70epochs_1.2_300.h5')
 
 
 def _load_model():
