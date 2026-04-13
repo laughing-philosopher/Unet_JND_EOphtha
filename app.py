@@ -75,7 +75,7 @@ MODEL_INFO = {
         "recommended_threshold": 0.5,
         "recommended_batch": 8,
         "notes": "Module should expose processing(image, threshold, batch_size).",
-        "color_output": True, # <--- CHANGE THIS TO True
+        "color_output": True, 
     },
     "DRG": {
         "title": "DR Grading",
@@ -206,7 +206,6 @@ def main():
     if "lang_code" not in st.session_state:
         st.session_state["lang_code"] = "en"  # Default to English
         
-    # Add this line right here, before your Sidebar and Header code!
     t = lambda key: get_text(st.session_state["lang_code"], key)
 
     # ------------------------------------------------------------------ #
@@ -297,11 +296,7 @@ def main():
         st.header(info["title"])
         st.write("**Description:**")
         st.write(info["description"])
-        if info["recommended_threshold"] is not None and info["recommended_batch"] is not None:
-            st.write("**Recommended threshold:**", info["recommended_threshold"])
-            st.write("**Recommended batch size:**", info["recommended_batch"])
-        else:
-            st.write("**Threshold / batch:** Not used for this model.")
+
         st.write("**Notes:**")
         st.write(info["notes"])
 
@@ -412,20 +407,8 @@ def main():
             return  # DRG path ends here
 
         # --- MA / ODOC / LESION ---
-        thr = st.number_input(
-            "Threshold (probability cutoff)",
-            min_value=0.0, max_value=1.0,
-            value=float(info["recommended_threshold"]),
-            step=0.01,
-            key=f"threshold_input_{model_key}",
-        )
-        batch = st.number_input(
-            "Batch size",
-            min_value=1, max_value=256,
-            value=int(info["recommended_batch"]),
-            step=1,
-            key=f"batch_input_{model_key}",
-        )
+        thr = float(info["recommended_threshold"])
+        batch = int(info["recommended_batch"])
 
         # Colour legend for LESION model
         if info.get("color_output") and model_key == "LESION":
@@ -458,6 +441,11 @@ def main():
                     progress_bar.progress(1.0, text="Done!")
                     status_text.empty()
                     progress_bar.empty()
+                
+                # ODOC: Handles dual return (mask, cdr)
+                elif model_key == "ODOC":
+                    with st.spinner(f"Running {info['title']} ..."):
+                        color_img, cdr_value = processing_fn(image_cv2, float(thr), int(batch))
 
                 # All other models: simple spinner
                 else:
@@ -465,10 +453,13 @@ def main():
                         result = processing_fn(image_cv2, float(thr), int(batch))
 
                 # -------------------------------------------------------- #
-                #  Branch A: colour-coded RGB output (LESION)              #
+                #  Branch A: colour-coded RGB output (LESION, ODOC)        #
                 # -------------------------------------------------------- #
                 if info.get("color_output"):
-                    color_img = np.array(result, dtype=np.uint8)
+                    
+                    # ⚠️ THIS IS THE CRITICAL FIX: Skip np.array for ODOC
+                    if model_key != "ODOC":
+                        color_img = np.array(result, dtype=np.uint8)
 
                     # Side-by-side: original | segmentation
                     col_a, col_b = st.columns(2)
@@ -483,6 +474,16 @@ def main():
                     blend = cv2.addWeighted(image_cv2, 0.55, color_img, 0.45, 0)
                     st.subheader("Blended overlay")
                     st.image(blend, use_container_width=True)
+                    
+                    # Display CDR and Glaucoma Warning for ODOC
+                    if model_key == "ODOC":
+                        st.markdown("---")
+                        st.metric("Vertical Cup-to-Disc Ratio (vCDR)", f"{cdr_value:.3f}")
+                        
+                        if cdr_value > 0.65:
+                            st.error(f"⚠️ Warning: CDR is {cdr_value:.3f}. This patient might have signs of Glaucoma. Please consult an ophthalmologist.")
+                        else:
+                            st.success(f"CDR is {cdr_value:.3f}. Ratio is within the normal range.")
 
                     st.session_state["last_report"] = {
                         "input": image_cv2.copy(),
@@ -491,9 +492,14 @@ def main():
                             (f"{info['title']} — Overlay",      blend),
                         ],
                     }
+                    
+                    if model_key == "ODOC":
+                         st.session_state["last_report"]["outputs"].append(
+                            (f"Clinical Finding: CDR {cdr_value:.3f}", color_img)
+                        )
 
                 # -------------------------------------------------------- #
-                #  Branch B: mask / probability output (MA, ODOC)           #
+                #  Branch B: mask / probability output (MA)                #
                 # -------------------------------------------------------- #
                 else:
                     if isinstance(result, (float, int)):

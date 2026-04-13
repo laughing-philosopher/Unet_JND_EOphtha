@@ -86,8 +86,19 @@ def processing(image_rgb, threshold=0.5, batch_size=8):
     color_mask[pred == 1] = (0, 255, 0)   # Green — Optic Disc
     color_mask[pred == 2] = (255, 0, 0)   # Red   — Optic Cup
 
-    # 5. Resize back to original image dimensions
-    # This is critical! app.py does cv2.addWeighted, so shapes MUST match exactly.
+    # 5. Calculate Vertical CDR
+    cdr = 0.0
+    # Get vertical heights of OD and OC masks
+    od_rows = np.any(pred == 1, axis=1)
+    oc_rows = np.any(pred == 2, axis=1)
+    
+    if np.any(od_rows):
+        od_height = np.sum(od_rows)
+        oc_height = np.sum(oc_rows) if np.any(oc_rows) else 0
+        cdr = oc_height / od_height if od_height > 0 else 0.0
+
+    # 6. Resize mask back to original
     color_mask_resized = cv2.resize(color_mask, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
 
-    return color_mask_resized
+    # Return both the mask and the calculated CDR
+    return color_mask_resized, round(cdr, 3)
