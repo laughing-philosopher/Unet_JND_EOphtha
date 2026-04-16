@@ -13,7 +13,7 @@ UI_TEXT = {
     "en": {
         "app_title": "AAKHI",
         "app_subtitle": "AI Assisted Kit for Human Intraocular Imaging",
-        "app_motto": "Simple. Offline. Retinal Screening.",
+        "app_motto": "Simple. Offline. Retina Screening.",
         "patient_details": "🧑‍⚕️ Patient Details",
         "patient_name": "Patient Name",
         "patient_age": "Patient Age",

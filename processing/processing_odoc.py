@@ -88,17 +88,20 @@ def processing(image_rgb, threshold=0.5, batch_size=8):
 
     # 5. Calculate Vertical CDR
     cdr = 0.0
+    od_height = 0
+    oc_height = 0
+    
     # Get vertical heights of OD and OC masks
     od_rows = np.any(pred == 1, axis=1)
     oc_rows = np.any(pred == 2, axis=1)
     
     if np.any(od_rows):
-        od_height = np.sum(od_rows)
-        oc_height = np.sum(oc_rows) if np.any(oc_rows) else 0
+        od_height = int(np.sum(od_rows))
+        oc_height = int(np.sum(oc_rows)) if np.any(oc_rows) else 0
         cdr = oc_height / od_height if od_height > 0 else 0.0
 
     # 6. Resize mask back to original
     color_mask_resized = cv2.resize(color_mask, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
 
-    # Return both the mask and the calculated CDR
-    return color_mask_resized, round(cdr, 3)
+    # Return the mask, CDR, and the heights used for calculation
+    return color_mask_resized, round(cdr, 3), od_height, oc_height

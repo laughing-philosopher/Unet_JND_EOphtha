@@ -425,7 +425,8 @@ def main():
                     thr_od   = float(info_od["recommended_threshold"])
                     batch_od = int(info_od["recommended_batch"])
                     with st.spinner("Running OD-OC segmentation ..."):
-                        color_img_od, cdr_value = info_od["module"].processing(image_cv2, thr_od, batch_od)
+                        # Unpack the newly added height variables
+                        color_img_od, cdr_value, od_height, oc_height = info_od["module"].processing(image_cv2, thr_od, batch_od)
                     blend_od = cv2.addWeighted(image_cv2, 0.55, color_img_od, 0.45, 0)
 
                     col_a, col_b = st.columns(2)
@@ -435,20 +436,23 @@ def main():
                         st.image(blend_od, caption="Blended overlay", use_container_width=True)
 
                     st.metric("Vertical Cup-to-Disc Ratio (vCDR)", f"{cdr_value:.3f}")
+                    st.caption(f"Calculated using Optic Disc vertical diameter: **{od_height}px**, Optic Cup vertical diameter: **{oc_height}px**")
+                    
                     if cdr_value > 0.65:
                         st.error(f"⚠️ CDR is {cdr_value:.3f} — possible signs of Glaucoma. Please consult an ophthalmologist.")
                     else:
                         st.success(f"CDR is {cdr_value:.3f} — within normal range.")
 
+                    # Append the heights to the label so it prints natively in the PDF report
                     all_outputs.extend([
                         ("OD-OC — Segmentation", color_img_od),
                         ("OD-OC — Overlay", blend_od),
-                        (f"OD-OC — CDR {cdr_value:.3f}", color_img_od),
+                        (f"OD-OC — CDR: {cdr_value:.3f} (OD Height: {od_height}px | OC Height: {oc_height}px)", color_img_od),
                     ])
                 except Exception as e:
                     st.error(f"OD-OC inference failed: {e}")
 
-            # ------------------------------------------------------------------ #
+           # ------------------------------------------------------------------ #
             #  MULTI-LESION DETECTOR                                              #
             # ------------------------------------------------------------------ #
             st.markdown("---")
@@ -476,7 +480,20 @@ def main():
                     with col_b:
                         st.image(blend_l, caption="Blended overlay", use_container_width=True)
 
+                    # --- Build a legend image explicitly for the PDF report ---
+                    legend_img = Image.new("RGB", (900, 80), color=(255, 255, 255))
+                    d = ImageDraw.Draw(legend_img)
+                    try:
+                        font = ImageFont.truetype("arial.ttf", 22)
+                    except Exception:
+                        font = ImageFont.load_default()
+                    
+                    legend_text = "Colour Key:  Red=Hard Exudates | Green=Hemorrhages | Blue=Microaneurysms | Yellow=Soft Exudates"
+                    d.text((20, 25), legend_text, fill=(30, 80, 150), font=font)
+                    # ----------------------------------------------------------
+
                     all_outputs.extend([
+                        ("Lesion — Colour Key", np.array(legend_img)),
                         ("Lesion — Segmentation", color_img_l),
                         ("Lesion — Overlay", blend_l),
                     ])
@@ -493,7 +510,6 @@ def main():
             _render_report_button(user, image_cv2)
 
     st.markdown("---")
-    st.caption("Tip: Place modules under ./processing and models under ./models.")
 
 
 if __name__ == "__main__":
