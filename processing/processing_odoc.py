@@ -81,27 +81,30 @@ def processing(image_rgb, threshold=0.5, batch_size=8):
     pred[p_od >= threshold] = 1   # Optic Disc (OD)
     pred[p_oc >= threshold] = 2   # Optic Cup (OC) overrides OD if overlapping
 
-    # 4. Color Mapping
-    color_mask = np.zeros((IMG_SIZE, IMG_SIZE, 3), dtype=np.uint8)
-    color_mask[pred == 1] = (0, 255, 0)   # Green — Optic Disc
-    color_mask[pred == 2] = (255, 0, 0)   # Red   — Optic Cup
-
-    # 5. Calculate Vertical CDR
+    # 4. Calculate Vertical CDR (Keep this logic to get heights)
     cdr = 0.0
-    od_height = 0
-    oc_height = 0
-    
-    # Get vertical heights of OD and OC masks
     od_rows = np.any(pred == 1, axis=1)
     oc_rows = np.any(pred == 2, axis=1)
+    od_height = int(np.sum(od_rows)) if np.any(od_rows) else 0
+    oc_height = int(np.sum(oc_rows)) if np.any(oc_rows) else 0
+    cdr = oc_height / od_height if od_height > 0 else 0.0
+
+    # 5. Create Outlines on the Original Image
+    # Resize the prediction mask back to original image size first for better accuracy
+    full_res_pred = cv2.resize(pred, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
     
-    if np.any(od_rows):
-        od_height = int(np.sum(od_rows))
-        oc_height = int(np.sum(oc_rows)) if np.any(oc_rows) else 0
-        cdr = oc_height / od_height if od_height > 0 else 0.0
+    # Create a copy of the input image to draw on
+    output_img = image_rgb.copy()
 
-    # 6. Resize mask back to original
-    color_mask_resized = cv2.resize(color_mask, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
+    # Draw Optic Disc Outline (Green)
+    mask_od = (full_res_pred == 1).astype(np.uint8)
+    contours_od, _ = cv2.findContours(mask_od, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(output_img, contours_od, -1, (0, 255, 0), 3) # Thickness = 3
 
-    # Return the mask, CDR, and the heights used for calculation
-    return color_mask_resized, round(cdr, 3), od_height, oc_height
+    # Draw Optic Cup Outline (Red)
+    mask_oc = (full_res_pred == 2).astype(np.uint8)
+    contours_oc, _ = cv2.findContours(mask_oc, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(output_img, contours_oc, -1, (255, 0, 0), 3)
+
+    # Return the outlined image, CDR, and heights
+    return output_img, round(cdr, 3), od_height, oc_height
