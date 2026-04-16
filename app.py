@@ -335,9 +335,30 @@ def main():
                     else:
                         st.success(f"CDR is {cdr_value:.3f} — within normal range.")
 
-                    # Update report data to use the outlined image
+                    # --- Build OD-OC Statistics Image for PDF Report ---
+                    odoc_stats_img = Image.new("RGB", (900, 180), color=(255, 255, 255))
+                    d = ImageDraw.Draw(odoc_stats_img)
+                    try:
+                        font_title = ImageFont.truetype("arial.ttf", 22)
+                        font_text = ImageFont.truetype("arial.ttf", 18)
+                    except Exception:
+                        font_title = ImageFont.load_default()
+                        font_text = ImageFont.load_default()
+                        
+                    d.text((20, 20), "Optic Disc / Optic Cup (OD-OC) Measurements", fill=(30, 80, 150), font=font_title)
+                    d.text((60, 65), f"Optic Disc Vertical Diameter: {od_height}px", fill=(50, 50, 50), font=font_text)
+                    d.text((60, 95), f"Optic Cup Vertical Diameter: {oc_height}px", fill=(50, 50, 50), font=font_text)
+                    
+                    # Color-code the vCDR status for the report
+                    status_color = (255, 0, 0) if cdr_value > 0.65 else (0, 150, 0)
+                    status_text = "⚠️ Possible signs of Glaucoma" if cdr_value > 0.65 else "Within normal range"
+                    d.text((60, 125), f"Vertical Cup-to-Disc Ratio (vCDR): {cdr_value:.3f} ({status_text})", fill=status_color, font=font_text)
+                    # ---------------------------------------------------
+
+                    # Update report data to use the outlined image and the stats image
                     all_outputs.extend([
-                        (f"OD-OC Analysis (vCDR: {cdr_value:.3f})", outlined_img),
+                        (f"OD-OC Analysis (vCDR: {cdr_value:.3f} | OD: {od_height}px | OC: {oc_height}px)", outlined_img),
+                        ("OD-OC — Measurements Summary", np.array(odoc_stats_img)),
                     ])
                 except Exception as e:
                     st.error(f"OD-OC inference failed: {e}")
