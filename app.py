@@ -5,6 +5,7 @@ import cv2
 import os
 import sys
 import base64
+from helper import get_path, get_base64_image, overlay_mask_on_rgb
 
 from auth import show_auth_screen, is_logged_in, logout, current_user
 from report import generate_report
@@ -12,16 +13,6 @@ from translations import LANGUAGES, get_text
 
 # --- set_page_config MUST be first Streamlit call ---
 st.set_page_config(layout="wide", page_title="Aakhi")
-
-# --- Helper for PyInstaller bundling ---
-def get_path(filename):
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, filename)
-    return filename
-
-def get_base64_image(image_path):
-    with open(image_path, "rb") as img_file:
-        return base64.b64encode(img_file.read()).decode()
 
 try:
     import processing.processing_ma as proc_ma
@@ -43,13 +34,6 @@ except Exception as e:
     print("Multi-lesion processing module not found:", e)
 
 from processing.processing_dr_grading import load_dr_model, predict_dr_severity
-
-
-def overlay_mask_on_rgb(rgb_img, mask, alpha=0.6):
-    out = rgb_img.copy()
-    mask_bool = (mask > 0)
-    out[mask_bool, 1] = 255
-    return out
 
 
 MODEL_INFO = {
@@ -128,7 +112,7 @@ def _render_report_button(user: dict, image_cv2: np.ndarray) -> None:
                 output_images  = report_data["outputs"],
             )
         patient_name = st.session_state.get("patient_name", "patient").replace(" ", "_")
-        filename = f"Aakhi_Report_{patient_name}_AllModels.pdf"
+        filename = f"Aakhi_Report_{patient_name}.pdf"
         st.download_button(
             label="⬇️ Download Report PDF",
             data=pdf_bytes,
@@ -136,7 +120,6 @@ def _render_report_button(user: dict, image_cv2: np.ndarray) -> None:
             mime="application/pdf",
             use_container_width=True,
         )
-
 
 def main():
     # ------------------------------------------------------------------ #

@@ -10,6 +10,9 @@ import json
 import os
 import hashlib
 import streamlit as st
+import sys
+
+from helper import get_base64_image, get_path
 
 USERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.json")
 
@@ -121,13 +124,18 @@ def show_auth_screen() -> None:
 
     # Center the card with columns
     _, center, _ = st.columns([1, 2, 1])
+    logo_path = get_path("aakhi_logo.png")    
+    img_base64 = get_base64_image(logo_path)
 
     with center:
         st.markdown(
-            """
+            f"""
             <div style='text-align:center; padding: 1.5rem 0 0.5rem 0;'>
-                <h2 style='margin-bottom:0;'>🔬 Aakhi</h2>
-                <p style='color:gray; margin-top:4px;'>Retinal Image Analysis</p>
+                <div style='display: inline-flex; align-items: center; justify-content: center;'>
+                    <img src='data:image/png;base64,{img_base64}' style='width: 80px; margin-right: 15px;'>
+                    <h2 style='margin: 0;'>AAKHI</h2>
+                </div>
+                <p style='color:gray; margin-top:4px;'>Retina Image Analysis</p>
             </div>
             """,
             unsafe_allow_html=True,
