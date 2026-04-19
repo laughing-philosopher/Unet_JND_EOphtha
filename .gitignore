@@ -20,6 +20,7 @@ models/*.h5
 models/*.bin
 models/*.pt
 models/*.pth
+models/*.keras
 
 # Portable Python (for USB distribution)
 python/
