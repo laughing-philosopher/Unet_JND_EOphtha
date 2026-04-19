@@ -21,6 +21,7 @@ models/*.bin
 models/*.pt
 models/*.pth
 models/*.keras
+models/*.pkl
 
 # Portable Python (for USB distribution)
 python/

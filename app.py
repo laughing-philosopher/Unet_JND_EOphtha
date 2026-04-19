@@ -309,10 +309,10 @@ def main():
             all_outputs = []  # list of (label, image_np) for the report
             
             # ------------------------------------------------------------------ #
-            #  OD-OC SEGMENTATION                                                 #
+            #  OD-OC SEGMENTATION & CLASSIFICATION                                #
             # ------------------------------------------------------------------ #
             st.markdown("---")
-            st.subheader("Optic Disc / Optic Cup (OD-OC) Segmentation")
+            st.subheader("Optic Disc / Cup (OD-OC) & Glaucoma Classification")
             info_od = MODEL_INFO["ODOC"]
             if info_od["module"] is None or not hasattr(info_od["module"], "processing"):
                 st.warning("ODOC processing module not available.")
@@ -320,46 +320,42 @@ def main():
                 try:
                     thr_od   = float(info_od["recommended_threshold"])
                     batch_od = int(info_od["recommended_batch"])
-                    with st.spinner("Running OD-OC segmentation ..."):
-                        # outlined_img now contains the input image + green/red outlines
-                        outlined_img, cdr_value, od_height, oc_height = info_od["module"].processing(image_cv2, thr_od, batch_od)
+                    
+                    with st.spinner("Running OD-OC segmentation & classifying features..."):
+                        outlined_img, features, rf_pred, rf_prob = info_od["module"].processing(image_cv2, thr_od, batch_od)
 
-                    # Display only one centered image
                     st.image(outlined_img, caption="OD-OC Outlines (Green: Disc, Red: Cup)", use_container_width=True)
 
-                    st.metric("Vertical Cup-to-Disc Ratio (vCDR)", f"{cdr_value:.3f}")
-                    st.caption(f"Calculated using Optic Disc vertical diameter: **{od_height}px**, Optic Cup vertical diameter: **{oc_height}px**")
-                    
-                    if cdr_value > 0.65:
-                        st.error(f"⚠️ CDR is {cdr_value:.3f} — possible signs of Glaucoma.")
+                    if features is None:
+                        st.warning("Could not clearly detect Optic Disc in this image. Classification skipped.")
                     else:
-                        st.success(f"CDR is {cdr_value:.3f} — within normal range.")
-
-                    # --- Build OD-OC Statistics Image for PDF Report ---
-                    odoc_stats_img = Image.new("RGB", (900, 180), color=(255, 255, 255))
-                    d = ImageDraw.Draw(odoc_stats_img)
-                    try:
-                        font_title = ImageFont.truetype("arial.ttf", 22)
-                        font_text = ImageFont.truetype("arial.ttf", 18)
-                    except Exception:
-                        font_title = ImageFont.load_default()
-                        font_text = ImageFont.load_default()
+                        cdr_value = features.get('v_cdr', 0.0)
                         
-                    d.text((20, 20), "Optic Disc / Optic Cup (OD-OC) Measurements", fill=(30, 80, 150), font=font_title)
-                    d.text((60, 65), f"Optic Disc Vertical Diameter: {od_height}px", fill=(50, 50, 50), font=font_text)
-                    d.text((60, 95), f"Optic Cup Vertical Diameter: {oc_height}px", fill=(50, 50, 50), font=font_text)
-                    
-                    # Color-code the vCDR status for the report
-                    status_color = (255, 0, 0) if cdr_value > 0.65 else (0, 150, 0)
-                    status_text = "⚠️ Possible signs of Glaucoma" if cdr_value > 0.65 else "Within normal range"
-                    d.text((60, 125), f"Vertical Cup-to-Disc Ratio (vCDR): {cdr_value:.3f} ({status_text})", fill=status_color, font=font_text)
-                    # ---------------------------------------------------
+                        col1, col2 = st.columns(2)
+                        col1.metric("Vertical Cup-to-Disc Ratio (vCDR)", f"{cdr_value:.3f}")
+                        col2.metric("Glaucoma Probability (RF Model)", f"{rf_prob * 100:.1f}%")
+                        
+                        if rf_pred == "Glaucoma":
+                            st.error(f"⚠️ High Risk: AAKHI predicts Glaucoma.")
+                        else:
+                            st.success(f"✅ Low Risk: AAKHI predicts Normal.")
 
-                    # Update report data to use the outlined image and the stats image
-                    all_outputs.extend([
-                        (f"OD-OC Analysis (vCDR: {cdr_value:.3f} | OD: {od_height}px | OC: {oc_height}px)", outlined_img),
-                        ("OD-OC — Measurements Summary", np.array(odoc_stats_img)),
-                    ])
+                        # --- Build OD-OC Statistics Image for PDF Report ---
+                        odoc_stats_img = Image.new("RGB", (900, 180), color=(255, 255, 255))
+                        d = ImageDraw.Draw(odoc_stats_img)
+                            
+                        d.text((20, 20), "OD-OC Segmentation & RF Classification", fill=(30, 80, 150))
+                        d.text((60, 65), f"Calculated vCDR: {cdr_value:.3f}", fill=(50, 50, 50))
+                        d.text((60, 95), f"Model Probability: {rf_prob * 100:.1f}%", fill=(50, 50, 50))
+                        
+                        status_color = (255, 0, 0) if rf_pred == "Glaucoma" else (0, 150, 0)
+                        d.text((60, 125), f"Prediction: {rf_pred.upper()}", fill=status_color)
+                        # ---------------------------------------------------
+
+                        all_outputs.extend([
+                            (f"OD-OC Analysis (vCDR: {cdr_value:.3f} | Pred: {rf_pred})", outlined_img),
+                            ("OD-OC & Glaucoma — Report Summary", np.array(odoc_stats_img)),
+                        ])
                 except Exception as e:
                     st.error(f"OD-OC inference failed: {e}")
                     
@@ -482,117 +478,117 @@ def main():
             # ------------------------------------------------------------------ #
             #  MICROANEURYSM (MA)                                                 #
             # ------------------------------------------------------------------ #
-            st.markdown("---")
-            st.subheader("Microaneurysm Detector (MA)")
-            info_ma = MODEL_INFO["MA"]
-            if info_ma["module"] is None or not hasattr(info_ma["module"], "processing"):
-                st.warning("MA processing module not available.")
-            else:
-                try:
-                    thr_ma   = float(info_ma["recommended_threshold"])
-                    batch_ma = int(info_ma["recommended_batch"])
-                    progress_bar = st.progress(0, text="Starting MA inference...")
-                    status_text  = st.empty()
+            # st.markdown("---")
+            # st.subheader("Microaneurysm Detector (MA)")
+            # info_ma = MODEL_INFO["MA"]
+            # if info_ma["module"] is None or not hasattr(info_ma["module"], "processing"):
+            #     st.warning("MA processing module not available.")
+            # else:
+            #     try:
+            #         thr_ma   = float(info_ma["recommended_threshold"])
+            #         batch_ma = int(info_ma["recommended_batch"])
+            #         progress_bar = st.progress(0, text="Starting MA inference...")
+            #         status_text  = st.empty()
 
-                    def ma_progress(current, total):
-                        pct = current / total
-                        progress_bar.progress(pct, text=f"Processing patches... batch {current}/{total}")
-                        status_text.caption(f"{int(pct * 100)}% complete")
+            #         def ma_progress(current, total):
+            #             pct = current / total
+            #             progress_bar.progress(pct, text=f"Processing patches... batch {current}/{total}")
+            #             status_text.caption(f"{int(pct * 100)}% complete")
 
-                    result_ma = info_ma["module"].processing(image_cv2, thr_ma, batch_ma, progress_callback=ma_progress)
-                    progress_bar.progress(1.0, text="Done!")
-                    status_text.empty()
-                    progress_bar.empty()
+            #         result_ma = info_ma["module"].processing(image_cv2, thr_ma, batch_ma, progress_callback=ma_progress)
+            #         progress_bar.progress(1.0, text="Done!")
+            #         status_text.empty()
+            #         progress_bar.empty()
 
-                    mask = np.array(result_ma)
-                    if mask.ndim == 3 and mask.shape[-1] == 1:
-                        mask = mask[..., 0]
-                    mask = mask.astype(np.float32)
-                    disp    = (mask * 255.0).clip(0, 255).astype(np.uint8)
-                    overlay = overlay_mask_on_rgb(image_cv2, mask > 0)
+            #         mask = np.array(result_ma)
+            #         if mask.ndim == 3 and mask.shape[-1] == 1:
+            #             mask = mask[..., 0]
+            #         mask = mask.astype(np.float32)
+            #         disp    = (mask * 255.0).clip(0, 255).astype(np.uint8)
+            #         overlay = overlay_mask_on_rgb(image_cv2, mask > 0)
 
-                    binary_mask = (mask > 0).astype(np.uint8) * 255
-                    kernel   = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
-                    dilated  = cv2.dilate(binary_mask, kernel, iterations=2)
-                    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                    circled  = image_cv2.copy()
+            #         binary_mask = (mask > 0).astype(np.uint8) * 255
+            #         kernel   = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
+            #         dilated  = cv2.dilate(binary_mask, kernel, iterations=2)
+            #         contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            #         circled  = image_cv2.copy()
                     
-                    # 1. Pre-calculate all MA properties to find the largest ones
-                    ma_data = []
-                    for i, cnt in enumerate(contours):
-                        (cx, cy), radius = cv2.minEnclosingCircle(cnt)
-                        ma_data.append({
-                            "id": i + 1,
-                            "cx": int(cx),
-                            "cy": int(cy),
-                            "radius": radius,
-                            "display_radius": max(int(radius), 10)
-                        })
+            #         # 1. Pre-calculate all MA properties to find the largest ones
+            #         ma_data = []
+            #         for i, cnt in enumerate(contours):
+            #             (cx, cy), radius = cv2.minEnclosingCircle(cnt)
+            #             ma_data.append({
+            #                 "id": i + 1,
+            #                 "cx": int(cx),
+            #                 "cy": int(cy),
+            #                 "radius": radius,
+            #                 "display_radius": max(int(radius), 10)
+            #             })
                     
-                    # 2. Identify the IDs of the top 5 largest MAs by radius
-                    top_5_ids = [ma["id"] for ma in sorted(ma_data, key=lambda x: x["radius"], reverse=True)[:5]]
+            #         # 2. Identify the IDs of the top 5 largest MAs by radius
+            #         top_5_ids = [ma["id"] for ma in sorted(ma_data, key=lambda x: x["radius"], reverse=True)[:5]]
                     
-                    ma_stats = []  # To store the ID and radius of each MA for the report
+            #         ma_stats = []  # To store the ID and radius of each MA for the report
                     
-                    for ma in ma_data:
-                        # 3. Determine color: RED (255,0,0) for the top 5, YELLOW (255,255,0) for others
-                        draw_color = (255, 0, 0) if ma["id"] in top_5_ids else (255, 255, 0)
+            #         for ma in ma_data:
+            #             # 3. Determine color: RED (255,0,0) for the top 5, YELLOW (255,255,0) for others
+            #             draw_color = (255, 0, 0) if ma["id"] in top_5_ids else (255, 255, 0)
                         
-                        # Draw the circle (radius) around the MA
-                        cv2.circle(circled, (ma["cx"], ma["cy"]), ma["display_radius"], draw_color, 2)
+            #             # Draw the circle (radius) around the MA
+            #             cv2.circle(circled, (ma["cx"], ma["cy"]), ma["display_radius"], draw_color, 2)
                         
-                        # Number the MA on the image
-                        cv2.putText(circled, str(ma["id"]), (ma["cx"] + ma["display_radius"], ma["cy"] - ma["display_radius"]), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, draw_color, 2, cv2.LINE_AA)
+            #             # Number the MA on the image
+            #             cv2.putText(circled, str(ma["id"]), (ma["cx"] + ma["display_radius"], ma["cy"] - ma["display_radius"]), 
+            #                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, draw_color, 2, cv2.LINE_AA)
                         
-                        # Save the ID and computed radius (rounded to 2 decimals)
-                        ma_stats.append((ma["id"], round(ma["radius"], 2)))
+            #             # Save the ID and computed radius (rounded to 2 decimals)
+            #             ma_stats.append((ma["id"], round(ma["radius"], 2)))
 
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        st.image(disp, caption="Probability map (0–255)", use_container_width=True)
-                    with col_b:
-                        st.image(overlay, caption="Green overlay", use_container_width=True)
-                    st.image(circled, caption=f"MA clusters — {len(contours)} cluster(s) found (Top 5 largest highlighted in Red)", use_container_width=True)
+            #         col_a, col_b = st.columns(2)
+            #         with col_a:
+            #             st.image(disp, caption="Probability map (0–255)", use_container_width=True)
+            #         with col_b:
+            #             st.image(overlay, caption="Green overlay", use_container_width=True)
+            #         st.image(circled, caption=f"MA clusters — {len(contours)} cluster(s) found (Top 5 largest highlighted in Red)", use_container_width=True)
 
-                    # --- Build a dynamic summary image explicitly for the PDF report ---
-                    num_mas = len(contours)
-                    rows_needed = (num_mas // 5) + 1  # 5 columns of text
-                    bg_height = max(100, 60 + rows_needed * 30)
+            #         # --- Build a dynamic summary image explicitly for the PDF report ---
+            #         num_mas = len(contours)
+            #         rows_needed = (num_mas // 5) + 1  # 5 columns of text
+            #         bg_height = max(100, 60 + rows_needed * 30)
                     
-                    stats_img = Image.new("RGB", (900, bg_height), color=(255, 255, 255))
-                    d = ImageDraw.Draw(stats_img)
-                    try:
-                        font_title = ImageFont.truetype("arial.ttf", 22)
-                        font_text = ImageFont.truetype("arial.ttf", 16)
-                    except Exception:
-                        font_title = ImageFont.load_default()
-                        font_text = ImageFont.load_default()
+            #         stats_img = Image.new("RGB", (900, bg_height), color=(255, 255, 255))
+            #         d = ImageDraw.Draw(stats_img)
+            #         try:
+            #             font_title = ImageFont.truetype("arial.ttf", 22)
+            #             font_text = ImageFont.truetype("arial.ttf", 16)
+            #         except Exception:
+            #             font_title = ImageFont.load_default()
+            #             font_text = ImageFont.load_default()
                     
-                    d.text((20, 15), f"Total Microaneurysms (MAs) Detected: {num_mas} (Top 5 largest in Red)", fill=(30, 80, 150), font=font_title)
+            #         d.text((20, 15), f"Total Microaneurysms (MAs) Detected: {num_mas} (Top 5 largest in Red)", fill=(30, 80, 150), font=font_title)
                     
-                    # Print the list of radii, wrapping to a new line every 5 entries
-                    x_offset, y_offset = 55, 55
-                    for ma_id, rad in ma_stats:
-                        # Highlight the top 5 in red text on the PDF report, others in dark gray
-                        report_text_color = (255, 0, 0) if ma_id in top_5_ids else (50, 50, 50)
+            #         # Print the list of radii, wrapping to a new line every 5 entries
+            #         x_offset, y_offset = 55, 55
+            #         for ma_id, rad in ma_stats:
+            #             # Highlight the top 5 in red text on the PDF report, others in dark gray
+            #             report_text_color = (255, 0, 0) if ma_id in top_5_ids else (50, 50, 50)
                         
-                        d.text((x_offset, y_offset), f"MA #{ma_id}: {rad}px", fill=report_text_color, font=font_text)
+            #             d.text((x_offset, y_offset), f"MA #{ma_id}: {rad}px", fill=report_text_color, font=font_text)
                         
-                        x_offset += 160
-                        if x_offset > 800:
-                            x_offset = 55
-                            y_offset += 30
-                    # -------------------------------------------------------------------
+            #             x_offset += 160
+            #             if x_offset > 800:
+            #                 x_offset = 55
+            #                 y_offset += 30
+            #         # -------------------------------------------------------------------
 
-                    all_outputs.extend([
-                        ("MA — Probability Map", disp),
-                        ("MA — Overlay", overlay),
-                        (f"MA — Clusters ({len(contours)} detected)", circled),
-                        ("MA — Detection Summary", np.array(stats_img)),
-                    ])
-                except Exception as e:
-                    st.error(f"MA inference failed: {e}")
+            #         all_outputs.extend([
+            #             ("MA — Probability Map", disp),
+            #             ("MA — Overlay", overlay),
+            #             (f"MA — Clusters ({len(contours)} detected)", circled),
+            #             ("MA — Detection Summary", np.array(stats_img)),
+            #         ])
+            #     except Exception as e:
+            #         st.error(f"MA inference failed: {e}")
 
             # ------------------------------------------------------------------ #
             #  DR GRADING                                                         #
