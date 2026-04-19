@@ -1,56 +1,65 @@
-import torch
-import torchvision.transforms as transforms
-from PIL import Image
 import os
-import timm
+import cv2
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras import layers, models
+import efficientnet.tfkeras as efn  # Required to recognize the EfficientNet architecture
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))   # .../BTP/processing
 ROOT_DIR = os.path.dirname(CURRENT_DIR)                    # .../BTP
-model_path = os.path.join(ROOT_DIR, "models", "pytorch_model_effb6.bin")
 
+# Path to your fully trained Kaggle model
+model_path = os.path.join(ROOT_DIR, "models", "best_dr_model.keras") 
 
 def load_dr_model():
-    # Step 1: Build model with 5-class head FIRST
-    model = timm.create_model("efficientnet_b6", pretrained=False, num_classes=5)
-
-    state = torch.load(model_path, map_location=torch.device("cpu"))
-
-    # Unwrap nested state_dict if needed
-    if isinstance(state, dict) and "state_dict" in state:
-        state = state["state_dict"]
-
-    # Strip 'module.' prefix from DataParallel checkpoints
-    if isinstance(state, dict):
-        state = {k.replace("module.", ""): v for k, v in state.items()}
-
-    # If checkpoint has 1000-class head, drop those weights and load the rest
-    state = {
-        k: v for k, v in state.items()
-        if not k.startswith("classifier")
-    }
-    model.load_state_dict(state, strict=False)
-    model.eval()
+    """Builds the architecture and loads the fine-tuned TensorFlow/Keras DR model weights."""
+    print("Building Architecture and Loading Diabetic Retinopathy Weights...")
+    
+    # 1. Rebuild the exact base architecture used on Kaggle
+    base_model = efn.EfficientNetB5(weights=None, include_top=False, input_shape=(456, 456, 3))
+    
+    # 2. Add the custom regression head
+    model = models.Sequential([
+        base_model,
+        layers.GlobalAveragePooling2D(),
+        layers.Dropout(0.5),
+        layers.Dense(1, activation='linear') 
+    ])
+    
+    # 3. Load JUST the weights from the file, bypassing the corrupted architecture graph
+    model.load_weights(model_path)
+    
     return model
 
-
 def predict_dr_severity(image_path, model):
-    transform = transforms.Compose([
-        transforms.Resize((528, 528)),
-        transforms.ToTensor(),
-        transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225]
-        )
-    ])
+    """Predicts the severity of Diabetic Retinopathy from a fundus image."""
+    
+    # 1. Image Preprocessing (Must match Kaggle exactly)
+    img = cv2.imread(image_path)
+    if img is None:
+        return "Error: Image not found"
+        
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = cv2.resize(img, (456, 456))  # 456x456 is the native size for EfficientNet-B5
+    img = img / 255.0                  # Rescale pixel values
+    img = np.expand_dims(img, axis=0)  # Add batch dimension: shape becomes (1, 456, 456, 3)
 
-    image = Image.open(image_path).convert("RGB")
-    tensor = transform(image).unsqueeze(0)
+    # 2. Get continuous prediction
+    raw_val = model.predict(img, verbose=0)[0][0]
 
-    with torch.no_grad():
-        outputs = model(tensor)
-        _, predicted = torch.max(outputs, 1)
-        severity = predicted.item()
+    # 3. Apply standard APTOS thresholds to round to discrete grades
+    if raw_val < 0.5:
+        severity = 0
+    elif raw_val < 1.5:
+        severity = 1
+    elif raw_val < 2.5:
+        severity = 2
+    elif raw_val < 3.5:
+        severity = 3
+    else:
+        severity = 4
 
+    # 4. Map integer to clinical terminology
     severity_map = {
         0: "No DR",
         1: "Mild DR",
