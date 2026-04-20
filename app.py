@@ -14,6 +14,14 @@ from translations import LANGUAGES, get_text
 # --- set_page_config MUST be first Streamlit call ---
 st.set_page_config(layout="wide", page_title="Aakhi")
 
+# --- Initialize default language state early so functions can access it ---
+if "lang_code" not in st.session_state:
+    st.session_state["lang_code"] = "en"  # Default to English
+
+# Global translation helper
+def t(key):
+    return get_text(st.session_state.get("lang_code", "en"), key)
+
 try:
     import processing.processing_ma as proc_ma
 except Exception as e:
@@ -100,7 +108,9 @@ def _render_report_button(user: dict, image_cv2: np.ndarray) -> None:
     if not report_data:
         return
     st.markdown("---")
-    if st.button("📄 Generate Report", use_container_width=True, key="report_btn_all"):
+    
+    # Translated the Generate Report button fallback to 'export_btn'
+    if st.button(f"📄 {t('export_btn')}", use_container_width=True, key="report_btn_all"):
         with st.spinner("Building PDF report ..."):
             pdf_bytes = generate_report(
                 patient_name   = st.session_state.get("patient_name", "Unknown"),
@@ -113,8 +123,9 @@ def _render_report_button(user: dict, image_cv2: np.ndarray) -> None:
             )
         patient_name = st.session_state.get("patient_name", "patient").replace(" ", "_")
         filename = f"Aakhi_Report_{patient_name}.pdf"
+        
         st.download_button(
-            label="⬇️ Download Report PDF",
+            label=f"⬇️ Download PDF / {t('export_btn')}",
             data=pdf_bytes,
             file_name=filename,
             mime="application/pdf",
@@ -141,9 +152,6 @@ def main():
         st.markdown("</div>", unsafe_allow_html=True)
         st.stop()
 
-
-    if "lang_code" not in st.session_state:
-        st.session_state["lang_code"] = "en"  # Default to English
 
     user = st.session_state.get("guest_user") if st.session_state.get("guest_mode") else current_user()
 
@@ -175,11 +183,6 @@ def main():
         }
         </style>
     """, unsafe_allow_html=True)
-    
-    if "lang_code" not in st.session_state:
-        st.session_state["lang_code"] = "en"  # Default to English
-        
-    t = lambda key: get_text(st.session_state["lang_code"], key)
 
     # ------------------------------------------------------------------ #
     #  SIDEBAR                                                             #
@@ -256,12 +259,15 @@ def main():
             st.session_state["patient_confirmed"] = False
 
         if not st.session_state["patient_confirmed"]:
-            st.subheader("🧑‍⚕️ Patient Details")
+            # Translated Title & Prompts
+            st.subheader(f"{t('patient_details')}")
             st.caption("Please enter patient details before uploading an image.")
-            p_name   = st.text_input("Patient Name", placeholder="e.g. Rachit Jain", key="input_patient_name")
-            p_age    = st.number_input("Patient Age", min_value=1, max_value=120, value=22, step=1, key="input_patient_age")
-            p_gender = st.selectbox("Gender", ["Male", "Female", "Other"], key="input_patient_gender")
-            if st.button("Confirm Patient", use_container_width=True):
+            
+            p_name   = st.text_input(t("patient_name"), placeholder="e.g. Rachit Jain", key="input_patient_name")
+            p_age    = st.number_input(t("patient_age"), min_value=1, max_value=120, value=22, step=1, key="input_patient_age")
+            p_gender = st.selectbox(t("gender"), ["Male", "Female", "Other"], key="input_patient_gender")
+            
+            if st.button(t("confirm"), use_container_width=True):
                 if not p_name.strip():
                     st.error("Please enter the patient's name.")
                 else:
@@ -279,9 +285,9 @@ def main():
         p_gender = st.session_state["patient_gender"]
         banner_col, change_col = st.columns([4, 1])
         with banner_col:
-            st.success(f"👤 Patient: **{p_name}** | Age: **{p_age}** | Gender: **{p_gender}**")
+            st.success(f"👤 Patient: **{p_name}** | {t('patient_age')}: **{p_age}** | {t('gender')}: **{p_gender}**")
         with change_col:
-            if st.button("Change Patient", use_container_width=True):
+            if st.button(t("change_patient"), use_container_width=True):
                 st.session_state["patient_confirmed"] = False
                 st.session_state["patient_name"]      = ""
                 st.session_state["patient_age"]       = 0
@@ -291,7 +297,8 @@ def main():
 
         st.markdown("---")
 
-        uploaded = st.file_uploader("Upload fundus image", type=["jpg", "jpeg", "png"], key="uploader_main")
+        # Translated File Upload 
+        uploaded = st.file_uploader(t("upload_prompt"), type=["jpg", "jpeg", "png"], key="uploader_main")
 
         if uploaded is None:
             st.info("Please upload a fundus image to begin analysis.")
@@ -303,7 +310,8 @@ def main():
         st.subheader("Input Image")
         st.image(image_cv2, use_container_width=True)
 
-        analyze_btn = st.button("🔍 Analyze", use_container_width=True)
+        # Translated Analyze button
+        analyze_btn = st.button(t("analyze_btn"), use_container_width=True)
 
         if analyze_btn:
             all_outputs = []  # list of (label, image_np) for the report
@@ -358,12 +366,127 @@ def main():
                         ])
                 except Exception as e:
                     st.error(f"OD-OC inference failed: {e}")
+                
+            # ------------------------------------------------------------------ #
+            #  MICROANEURYSM (MA)                                                 #
+            # ------------------------------------------------------------------ #
+            st.markdown("---")
+            st.subheader("Microaneurysm Detector (MA)")
+            info_ma = MODEL_INFO["MA"]
+            if info_ma["module"] is None or not hasattr(info_ma["module"], "processing"):
+                st.warning("MA processing module not available.")
+            else:
+                try:
+                    thr_ma   = float(info_ma["recommended_threshold"])
+                    batch_ma = int(info_ma["recommended_batch"])
+                    progress_bar = st.progress(0, text="Starting MA inference...")
+                    status_text  = st.empty()
+
+                    def ma_progress(current, total):
+                        pct = current / total
+                        progress_bar.progress(pct, text=f"Processing patches... batch {current}/{total}")
+                        status_text.caption(f"{int(pct * 100)}% complete")
+
+                    result_ma = info_ma["module"].processing(image_cv2, thr_ma, batch_ma, progress_callback=ma_progress)
+                    progress_bar.progress(1.0, text="Done!")
+                    status_text.empty()
+                    progress_bar.empty()
+
+                    mask = np.array(result_ma)
+                    if mask.ndim == 3 and mask.shape[-1] == 1:
+                        mask = mask[..., 0]
+                    mask = mask.astype(np.float32)
+                    disp    = (mask * 255.0).clip(0, 255).astype(np.uint8)
+                    overlay = overlay_mask_on_rgb(image_cv2, mask > 0)
+
+                    binary_mask = (mask > 0).astype(np.uint8) * 255
+                    kernel   = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
+                    dilated  = cv2.dilate(binary_mask, kernel, iterations=2)
+                    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    circled  = image_cv2.copy()
+                    
+                    # 1. Pre-calculate all MA properties to find the largest ones
+                    ma_data = []
+                    for i, cnt in enumerate(contours):
+                        (cx, cy), radius = cv2.minEnclosingCircle(cnt)
+                        ma_data.append({
+                            "id": i + 1,
+                            "cx": int(cx),
+                            "cy": int(cy),
+                            "radius": radius,
+                            "display_radius": max(int(radius), 10)
+                        })
+                    
+                    # 2. Identify the IDs of the top 5 largest MAs by radius
+                    top_5_ids = [ma["id"] for ma in sorted(ma_data, key=lambda x: x["radius"], reverse=True)[:5]]
+                    
+                    ma_stats = []  # To store the ID and radius of each MA for the report
+                    
+                    for ma in ma_data:
+                        # 3. Determine color: RED (255,0,0) for the top 5, YELLOW (255,255,0) for others
+                        draw_color = (255, 0, 0) if ma["id"] in top_5_ids else (255, 255, 0)
+                        
+                        # Draw the circle (radius) around the MA
+                        cv2.circle(circled, (ma["cx"], ma["cy"]), ma["display_radius"], draw_color, 2)
+                        
+                        # Number the MA on the image
+                        cv2.putText(circled, str(ma["id"]), (ma["cx"] + ma["display_radius"], ma["cy"] - ma["display_radius"]), 
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, draw_color, 2, cv2.LINE_AA)
+                        
+                        # Save the ID and computed radius (rounded to 2 decimals)
+                        ma_stats.append((ma["id"], round(ma["radius"], 2)))
+
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.image(disp, caption="Probability map (0–255)", use_container_width=True)
+                    with col_b:
+                        st.image(overlay, caption="Green overlay", use_container_width=True)
+                    st.image(circled, caption=f"MA clusters — {len(contours)} cluster(s) found (Top 5 largest highlighted in Red)", use_container_width=True)
+
+                    # --- Build a dynamic summary image explicitly for the PDF report ---
+                    num_mas = len(contours)
+                    rows_needed = (num_mas // 5) + 1  # 5 columns of text
+                    bg_height = max(100, 60 + rows_needed * 30)
+                    
+                    stats_img = Image.new("RGB", (900, bg_height), color=(255, 255, 255))
+                    d = ImageDraw.Draw(stats_img)
+                    try:
+                        font_title = ImageFont.truetype("arial.ttf", 22)
+                        font_text = ImageFont.truetype("arial.ttf", 16)
+                    except Exception:
+                        font_title = ImageFont.load_default()
+                        font_text = ImageFont.load_default()
+                    
+                    d.text((20, 15), f"Total Microaneurysms (MAs) Detected: {num_mas} (Top 5 largest in Red)", fill=(30, 80, 150), font=font_title)
+                    
+                    # Print the list of radii, wrapping to a new line every 5 entries
+                    x_offset, y_offset = 55, 55
+                    for ma_id, rad in ma_stats:
+                        # Highlight the top 5 in red text on the PDF report, others in dark gray
+                        report_text_color = (255, 0, 0) if ma_id in top_5_ids else (50, 50, 50)
+                        
+                        d.text((x_offset, y_offset), f"MA #{ma_id}: {rad}px", fill=report_text_color, font=font_text)
+                        
+                        x_offset += 160
+                        if x_offset > 800:
+                            x_offset = 55
+                            y_offset += 30
+                    # -------------------------------------------------------------------
+
+                    all_outputs.extend([
+                        ("MA — Probability Map", disp),
+                        ("MA — Overlay", overlay),
+                        (f"MA — Clusters ({len(contours)} detected)", circled),
+                        ("MA — Detection Summary", np.array(stats_img)),
+                    ])
+                except Exception as e:
+                    st.error(f"MA inference failed: {e}")
                     
             # ------------------------------------------------------------------ #
             #  MULTI-LESION DETECTOR                                              #
             # ------------------------------------------------------------------ #
             st.markdown("---")
-            st.subheader("Multi-Lesion Detector (IDRiD / FIAM)")
+            st.subheader("Multi-Lesion Detector")
             info_lesion = MODEL_INFO["LESION"]
             if info_lesion["module"] is None or not hasattr(info_lesion["module"], "processing"):
                 st.warning("Multi-Lesion processing module not available.")
@@ -474,121 +597,6 @@ def main():
                     ])
                 except Exception as e:
                     st.error(f"Multi-Lesion inference failed: {e}")
-
-            # ------------------------------------------------------------------ #
-            #  MICROANEURYSM (MA)                                                 #
-            # ------------------------------------------------------------------ #
-            # st.markdown("---")
-            # st.subheader("Microaneurysm Detector (MA)")
-            # info_ma = MODEL_INFO["MA"]
-            # if info_ma["module"] is None or not hasattr(info_ma["module"], "processing"):
-            #     st.warning("MA processing module not available.")
-            # else:
-            #     try:
-            #         thr_ma   = float(info_ma["recommended_threshold"])
-            #         batch_ma = int(info_ma["recommended_batch"])
-            #         progress_bar = st.progress(0, text="Starting MA inference...")
-            #         status_text  = st.empty()
-
-            #         def ma_progress(current, total):
-            #             pct = current / total
-            #             progress_bar.progress(pct, text=f"Processing patches... batch {current}/{total}")
-            #             status_text.caption(f"{int(pct * 100)}% complete")
-
-            #         result_ma = info_ma["module"].processing(image_cv2, thr_ma, batch_ma, progress_callback=ma_progress)
-            #         progress_bar.progress(1.0, text="Done!")
-            #         status_text.empty()
-            #         progress_bar.empty()
-
-            #         mask = np.array(result_ma)
-            #         if mask.ndim == 3 and mask.shape[-1] == 1:
-            #             mask = mask[..., 0]
-            #         mask = mask.astype(np.float32)
-            #         disp    = (mask * 255.0).clip(0, 255).astype(np.uint8)
-            #         overlay = overlay_mask_on_rgb(image_cv2, mask > 0)
-
-            #         binary_mask = (mask > 0).astype(np.uint8) * 255
-            #         kernel   = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
-            #         dilated  = cv2.dilate(binary_mask, kernel, iterations=2)
-            #         contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            #         circled  = image_cv2.copy()
-                    
-            #         # 1. Pre-calculate all MA properties to find the largest ones
-            #         ma_data = []
-            #         for i, cnt in enumerate(contours):
-            #             (cx, cy), radius = cv2.minEnclosingCircle(cnt)
-            #             ma_data.append({
-            #                 "id": i + 1,
-            #                 "cx": int(cx),
-            #                 "cy": int(cy),
-            #                 "radius": radius,
-            #                 "display_radius": max(int(radius), 10)
-            #             })
-                    
-            #         # 2. Identify the IDs of the top 5 largest MAs by radius
-            #         top_5_ids = [ma["id"] for ma in sorted(ma_data, key=lambda x: x["radius"], reverse=True)[:5]]
-                    
-            #         ma_stats = []  # To store the ID and radius of each MA for the report
-                    
-            #         for ma in ma_data:
-            #             # 3. Determine color: RED (255,0,0) for the top 5, YELLOW (255,255,0) for others
-            #             draw_color = (255, 0, 0) if ma["id"] in top_5_ids else (255, 255, 0)
-                        
-            #             # Draw the circle (radius) around the MA
-            #             cv2.circle(circled, (ma["cx"], ma["cy"]), ma["display_radius"], draw_color, 2)
-                        
-            #             # Number the MA on the image
-            #             cv2.putText(circled, str(ma["id"]), (ma["cx"] + ma["display_radius"], ma["cy"] - ma["display_radius"]), 
-            #                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, draw_color, 2, cv2.LINE_AA)
-                        
-            #             # Save the ID and computed radius (rounded to 2 decimals)
-            #             ma_stats.append((ma["id"], round(ma["radius"], 2)))
-
-            #         col_a, col_b = st.columns(2)
-            #         with col_a:
-            #             st.image(disp, caption="Probability map (0–255)", use_container_width=True)
-            #         with col_b:
-            #             st.image(overlay, caption="Green overlay", use_container_width=True)
-            #         st.image(circled, caption=f"MA clusters — {len(contours)} cluster(s) found (Top 5 largest highlighted in Red)", use_container_width=True)
-
-            #         # --- Build a dynamic summary image explicitly for the PDF report ---
-            #         num_mas = len(contours)
-            #         rows_needed = (num_mas // 5) + 1  # 5 columns of text
-            #         bg_height = max(100, 60 + rows_needed * 30)
-                    
-            #         stats_img = Image.new("RGB", (900, bg_height), color=(255, 255, 255))
-            #         d = ImageDraw.Draw(stats_img)
-            #         try:
-            #             font_title = ImageFont.truetype("arial.ttf", 22)
-            #             font_text = ImageFont.truetype("arial.ttf", 16)
-            #         except Exception:
-            #             font_title = ImageFont.load_default()
-            #             font_text = ImageFont.load_default()
-                    
-            #         d.text((20, 15), f"Total Microaneurysms (MAs) Detected: {num_mas} (Top 5 largest in Red)", fill=(30, 80, 150), font=font_title)
-                    
-            #         # Print the list of radii, wrapping to a new line every 5 entries
-            #         x_offset, y_offset = 55, 55
-            #         for ma_id, rad in ma_stats:
-            #             # Highlight the top 5 in red text on the PDF report, others in dark gray
-            #             report_text_color = (255, 0, 0) if ma_id in top_5_ids else (50, 50, 50)
-                        
-            #             d.text((x_offset, y_offset), f"MA #{ma_id}: {rad}px", fill=report_text_color, font=font_text)
-                        
-            #             x_offset += 160
-            #             if x_offset > 800:
-            #                 x_offset = 55
-            #                 y_offset += 30
-            #         # -------------------------------------------------------------------
-
-            #         all_outputs.extend([
-            #             ("MA — Probability Map", disp),
-            #             ("MA — Overlay", overlay),
-            #             (f"MA — Clusters ({len(contours)} detected)", circled),
-            #             ("MA — Detection Summary", np.array(stats_img)),
-            #         ])
-            #     except Exception as e:
-            #         st.error(f"MA inference failed: {e}")
 
             # ------------------------------------------------------------------ #
             #  DR GRADING                                                         #
