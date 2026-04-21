@@ -14,7 +14,7 @@ Called by app.py as:
     result_rgb = processing(image_cv2, threshold, batch_size)
 """
 
-import os
+import sys, os
 import numpy as np
 import cv2
 import tensorflow as tf
@@ -163,8 +163,9 @@ class FIAM(tf.keras.layers.Layer):
 #  Lazy model loader (singleton)                                     #
 # ------------------------------------------------------------------ #
 _model = None
-MODEL_FILENAME = os.path.join('models', 'Unet+FIAM_IDriD_70epochs_1.2_300.h5')
 
+BASE_PATH = sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_FILENAME = os.path.join(BASE_PATH, 'models', 'Unet+FIAM_IDriD_70epochs_1.2_300.h5')
 
 def _load_model():
     global _model

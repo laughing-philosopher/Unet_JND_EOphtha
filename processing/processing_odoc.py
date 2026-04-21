@@ -1,4 +1,4 @@
-import os
+import os, sys
 import cv2
 import torch
 import numpy as np
@@ -9,8 +9,9 @@ import segmentation_models_pytorch as smp
 # ==========================================
 # CONFIGURATION
 # ==========================================
-MODEL_PATH = os.path.join("models", "best_unet_refuge2.pth")
-RF_MODEL_PATH = os.path.join("models", "glaucoma_rf_model.pkl")
+BASE_PATH = sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_PATH = os.path.join(BASE_PATH, "models", "best_unet_refuge2.pth")
+RF_MODEL_PATH = os.path.join(BASE_PATH, "models", "glaucoma_rf_model.pkl")
 
 IMG_SIZE = 512
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)

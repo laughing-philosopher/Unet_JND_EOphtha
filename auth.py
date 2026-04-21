@@ -15,7 +15,24 @@ import sys
 from helper import get_base64_image, get_path
 from translations import get_text  # Added import for translations
 
-USERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.json")
+
+def _get_users_file() -> str:
+    """
+    Returns the correct path for users.json in all environments:
+    - Running as .exe (PyInstaller): next to the .exe on the USB (writable)
+    - Running as .py (dev): next to auth.py in the project folder
+    
+    IMPORTANT: sys._MEIPASS is a READ-ONLY temp folder — we must NOT store
+    users.json there, or new registrations will be lost on every launch.
+    """
+    if hasattr(sys, '_MEIPASS'):
+        # Place users.json next to Aakhi.exe on the USB drive (writable)
+        return os.path.join(os.path.dirname(sys.executable), "users.json")
+    # Dev mode: place next to auth.py
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.json")
+
+
+USERS_FILE = _get_users_file()
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -50,6 +67,8 @@ def _load_users() -> dict:
 
 def _save_users(users: dict) -> None:
     """Persist users dict to disk."""
+    # Ensure the directory exists (important for first run on USB)
+    os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
     with open(USERS_FILE, "w") as f:
         json.dump(users, f, indent=2)
 
@@ -86,7 +105,6 @@ def register(username: str, password: str, full_name: str) -> tuple[bool, str]:
     username = username.strip().lower()
 
     if not username or not password or not full_name.strip():
-        # Passed back to UI, can remain English or be translated at the UI level
         return False, "All fields are required."
     if len(username) < 3:
         return False, "Username must be at least 3 characters."
@@ -135,7 +153,7 @@ def show_auth_screen() -> None:
 
     # Center the card with columns
     _, center, _ = st.columns([1, 2, 1])
-    logo_path = get_path("aakhi_logo.png")    
+    logo_path = get_path("aakhi_logo.png")
     img_base64 = get_base64_image(logo_path)
 
     with center:

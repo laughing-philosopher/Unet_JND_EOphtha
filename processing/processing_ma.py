@@ -9,11 +9,10 @@ Img_Width = 48
 Img_Height = 48
 Img_Channels = 1
 
-import os
+import sys, os
 
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(CURRENT_DIR)
-model_path = os.path.join(ROOT_DIR, "models", "UNet_JND_EOphtha.h5")
+BASE_PATH = sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+model_path = os.path.join(BASE_PATH, "models", "UNet_JND_EOphtha.h5")
 
 # Lazy model loader
 _model = None

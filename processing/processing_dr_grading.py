@@ -4,12 +4,10 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, models
 import efficientnet.tfkeras as efn  # Required to recognize the EfficientNet architecture
+import sys, os
 
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))   # .../BTP/processing
-ROOT_DIR = os.path.dirname(CURRENT_DIR)                    # .../BTP
-
-# Path to your fully trained Kaggle model
-model_path = os.path.join(ROOT_DIR, "models", "best_dr_model.keras") 
+BASE_PATH = sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+model_path = os.path.join(BASE_PATH, "models", "best_dr_model.keras")
 
 def load_dr_model():
     """Builds the architecture and loads the fine-tuned TensorFlow/Keras DR model weights."""
