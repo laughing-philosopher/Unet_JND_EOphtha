@@ -329,6 +329,29 @@ def _run_phase1(job_id: str, img_rgb: np.ndarray) -> None:
     q.put({"type": "phase1_ready"})
 
 
+def _build_circled_overlay(img_rgb: np.ndarray, binary_mask: np.ndarray):
+    """Build a circled-cluster overlay from a binary mask. Returns (circled_img, count)."""
+    bm = (binary_mask > 0).astype(np.uint8) * 255
+    kernel  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
+    dilated = cv2.dilate(bm, kernel, iterations=2)
+    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    circled = img_rgb.copy()
+    for cnt in contours:
+        (cx, cy), radius = cv2.minEnclosingCircle(cnt)
+        cv2.circle(circled, (int(cx), int(cy)), max(int(radius), 10), (255, 255, 255), 2)
+    return circled, len(contours)
+
+
+def _build_removed_fp_overlay(img_rgb: np.ndarray, removed_locs: list):
+    """Draw FP markers on image for removed false-positive locations."""
+    out = img_rgb.copy()
+    for (x, y) in removed_locs:
+        cv2.circle(out, (x, y), 12, (255, 0, 0), 2)
+        cv2.putText(out, "FP", (x + 10, y - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+    return out
+
+
 def _run_ma(job_id: str, img_rgb: np.ndarray) -> None:
     """Run MA detection asynchronously; update progress via SSE queue."""
     job = jobs[job_id]
@@ -352,40 +375,53 @@ def _run_ma(job_id: str, img_rgb: np.ndarray) -> None:
 
         q.put({"type": "ma_started"})
         result = ma_proc(img_rgb, threshold=0.1, batch_size=20, progress_callback=_progress)
-        mask = np.array(result, dtype=np.float32)
-        if mask.ndim == 3:
-            mask = mask[..., 0]
 
-        # Build circle overlay
-        binary  = (mask > 0).astype(np.uint8) * 255
-        kernel  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
-        dilated = cv2.dilate(binary, kernel, iterations=2)
-        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # result is now a dict with both baseline and refined masks
+        prob_map      = result["prob_map"]
+        baseline_mask = result["baseline_mask"]
+        refined_mask  = result["refined_mask"]
+        adv_count     = result["baseline_count"]
+        basic_count   = result["refined_count"]
+        removed_count = result["removed_count"]
+        removed_locs  = result["removed_locations"]
+        fp_pct        = (100.0 * removed_count / max(adv_count, 1))
 
-        circled = img_rgb.copy()
-        for cnt in contours:
-            (cx, cy), radius = cv2.minEnclosingCircle(cnt)
-            cv2.circle(circled, (int(cx), int(cy)), max(int(radius), 10), (220, 30, 30), 2)
+        # Build circle overlays for both modes
+        circled_adv,   n_adv   = _build_circled_overlay(img_rgb, baseline_mask)
+        circled_basic, n_basic = _build_circled_overlay(img_rgb, refined_mask)
+        removed_vis            = _build_removed_fp_overlay(img_rgb, removed_locs)
 
-        # Build green probability overlay
-        disp    = (mask * 255.0).clip(0, 255).astype(np.uint8)
-        green   = np.zeros_like(img_rgb)
+        # Build green probability overlay (shared)
+        disp  = (prob_map * 255.0).clip(0, 255).astype(np.uint8)
+        green = np.zeros_like(img_rgb)
         green[:, :, 1] = disp
         prob_overlay = cv2.addWeighted(img_rgb, 0.7, green, 0.3, 0)
 
         jobs[job_id]["results"]["ma"] = {
-            "image_b64":    _np_to_b64(circled),
-            "overlay_b64":  _np_to_b64(prob_overlay),
-            "count":        len(contours),
-            "image_arr":    circled,
-            "overlay_arr":  prob_overlay,
+            # Backward-compatible keys
+            "image_b64":      _np_to_b64(circled_adv),
+            "overlay_b64":    _np_to_b64(prob_overlay),
+            "count":          n_adv,
+            "image_arr":      circled_adv,
+            "overlay_arr":    prob_overlay,
+            # New Advanced / Basic keys
+            "adv_count":        n_adv,
+            "basic_count":      n_basic,
+            "removed_count":    removed_count,
+            "fp_reduction_pct": fp_pct,
+            "adv_image_arr":    circled_adv,
+            "basic_image_arr":  circled_basic,
+            "removed_image_arr":removed_vis,
+            "adv_image_b64":    _np_to_b64(circled_adv),
+            "basic_image_b64":  _np_to_b64(circled_basic),
+            "removed_image_b64":_np_to_b64(removed_vis),
         }
         jobs[job_id]["phase2_ready"] = True
-        q.put({"type": "phase2_ready", "ma_count": len(contours)})
+        q.put({"type": "phase2_ready", "ma_count": n_adv, "ma_basic_count": n_basic})
 
     except Exception as e:
         traceback.print_exc()
-        jobs[job_id]["results"]["ma"] = {"error": str(e), "count": 0}
+        jobs[job_id]["results"]["ma"] = {"error": str(e), "count": 0, "adv_count": 0, "basic_count": 0}
         q.put({"type": "ma_error", "msg": str(e)})
 
 
@@ -578,11 +614,18 @@ def api_results(job_id: str):
             "ma": {
                 "status":       "complete" if job["phase2_ready"] else
                                 ("running" if job["phase1_ready"] else "pending"),
-                "count":        res.get("ma", {}).get("count", 0),
-                "image_b64":    res.get("ma", {}).get("image_b64", ""),
-                "overlay_b64":  res.get("ma", {}).get("overlay_b64", ""),
-                "error":        res.get("ma", {}).get("error", ""),
-                "progress_pct": int(job["ma_progress"] / max(job["ma_total"], 1) * 100),
+                "count":            res.get("ma", {}).get("count", 0),
+                "adv_count":        res.get("ma", {}).get("adv_count", 0),
+                "basic_count":      res.get("ma", {}).get("basic_count", 0),
+                "removed_count":    res.get("ma", {}).get("removed_count", 0),
+                "fp_reduction_pct": res.get("ma", {}).get("fp_reduction_pct", 0.0),
+                "image_b64":        res.get("ma", {}).get("image_b64", ""),
+                "adv_image_b64":    res.get("ma", {}).get("adv_image_b64", ""),
+                "basic_image_b64":  res.get("ma", {}).get("basic_image_b64", ""),
+                "removed_image_b64":res.get("ma", {}).get("removed_image_b64", ""),
+                "overlay_b64":      res.get("ma", {}).get("overlay_b64", ""),
+                "error":            res.get("ma", {}).get("error", ""),
+                "progress_pct":     int(job["ma_progress"] / max(job["ma_total"], 1) * 100),
             },
         },
     }
@@ -631,6 +674,13 @@ def api_report(job_id: str, phase: int):
                 "image":            res.get("ma", {}).get("image_arr"),
                 "original_overlay": res.get("ma", {}).get("overlay_arr"),
                 "count":            res.get("ma", {}).get("count", 0),
+                "adv_count":        res.get("ma", {}).get("adv_count", 0),
+                "basic_count":      res.get("ma", {}).get("basic_count", 0),
+                "removed_count":    res.get("ma", {}).get("removed_count", 0),
+                "fp_reduction_pct": res.get("ma", {}).get("fp_reduction_pct", 0.0),
+                "adv_image":        res.get("ma", {}).get("adv_image_arr"),
+                "basic_image":      res.get("ma", {}).get("basic_image_arr"),
+                "removed_image":    res.get("ma", {}).get("removed_image_arr"),
             } if phase == 2 else {},
         },
         original_image = job["image_arr"],
