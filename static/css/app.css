@@ -1,0 +1,37 @@
+/* app.css — Aakhi custom styles */
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Smooth tab transitions */
+[x-cloak] { display: none !important; }
+
+/* Custom scrollbar for overflow-x tabs */
+.overflow-x-auto::-webkit-scrollbar {
+  height: 2px;
+}
+.overflow-x-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 1px;
+}
+
+/* Image display */
+img {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* Progress ring animation */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Print / PDF-friendly hidden elements */
+@media print {
+  nav, button, input, select { display: none !important; }
+}

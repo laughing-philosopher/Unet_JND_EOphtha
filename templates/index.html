@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aakhi — Retinal Analysis</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body class="bg-slate-50 min-h-screen" x-data="aakhi()" x-init="init()">
+
+<!-- ── Navigation ──────────────────────────────────────────────────────── -->
+<nav class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
+  <div class="flex items-center gap-3">
+    <span class="text-xl font-light tracking-widest text-slate-700" x-text="t('app_title')">AAKHI</span>
+    <span class="text-xs text-slate-400 tracking-wider hidden sm:block" x-text="t('app_subtitle')"></span>
+  </div>
+  <div class="flex items-center gap-4">
+    <!-- Language selector -->
+    <div class="flex items-center gap-1">
+      <span class="text-xs text-slate-400">Lang:</span>
+      <template x-for="l in languages" :key="l.code">
+        <button @click="switchLang(l.code)"
+          :class="lang === l.code ? 'bg-blue-100 text-blue-700 font-medium' : 'text-slate-500 hover:bg-slate-100'"
+          class="text-xs px-2 py-0.5 rounded transition-colors"
+          x-text="l.label"></button>
+      </template>
+    </div>
+    <div class="text-xs text-slate-400">{{ user.full_name }}</div>
+    <a href="/logout" class="text-xs text-slate-400 hover:text-slate-700 transition-colors">
+      Sign out
+    </a>
+  </div>
+</nav>
+
+<!-- ── Main Layout ─────────────────────────────────────────────────────── -->
+<div class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  <!-- ── LEFT PANEL ── Patient + Upload ─────────────────────────────────── -->
+  <div class="lg:col-span-1 space-y-4">
+
+    <!-- Patient Info Card -->
+    <div class="bg-white rounded-xl border border-slate-200 p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-medium text-slate-600 uppercase tracking-wider"
+            x-text="t('patient_info')"></h2>
+        <button x-show="patientConfirmed" @click="resetPatient()"
+          class="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+          x-text="t('change_patient')"></button>
+      </div>
+
+      <!-- Input form -->
+      <div x-show="!patientConfirmed" class="space-y-3">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider"
+                 x-text="t('patient_name')"></label>
+          <input x-model="patient.name" type="text"
+            class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700"
+            placeholder="e.g. Ramesh Kumar" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider"
+                   x-text="t('patient_age')"></label>
+            <input x-model="patient.age" type="number" min="1" max="120"
+              class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider"
+                   x-text="t('patient_gender')"></label>
+            <select x-model="patient.gender"
+              class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+              <option value="Male" x-text="t('male')"></option>
+              <option value="Female" x-text="t('female')"></option>
+              <option value="Other" x-text="t('other')"></option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider"
+                 x-text="t('patient_eye')"></label>
+          <select x-model="patient.eye"
+            class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+            <option value="Right Eye (OD)" x-text="t('right_eye')"></option>
+            <option value="Left Eye (OS)" x-text="t('left_eye')"></option>
+          </select>
+        </div>
+        <button @click="confirmPatient()"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium
+                 rounded-lg py-2.5 transition-colors"
+          x-text="t('confirm_patient')"></button>
+      </div>
+
+      <!-- Confirmed banner -->
+      <div x-show="patientConfirmed" class="bg-blue-50 rounded-lg px-4 py-3">
+        <div class="text-sm font-medium text-blue-800" x-text="patient.name"></div>
+        <div class="text-xs text-blue-600 mt-0.5">
+          <span x-text="patient.age"></span> y/o ·
+          <span x-text="patient.gender"></span> ·
+          <span x-text="patient.eye"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload Card -->
+    <div class="bg-white rounded-xl border border-slate-200 p-5" x-show="patientConfirmed">
+      <h2 class="text-sm font-medium text-slate-600 uppercase tracking-wider mb-4"
+          x-text="t('upload_image')"></h2>
+
+      <div class="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center
+                  hover:border-blue-300 transition-colors cursor-pointer"
+           @click="$refs.fileInput.click()"
+           @dragover.prevent @drop.prevent="handleDrop($event)">
+        <template x-if="!previewUrl">
+          <div>
+            <svg class="mx-auto mb-3 w-10 h-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <p class="text-sm text-slate-400">Click or drag fundus image here</p>
+            <p class="text-xs text-slate-300 mt-1">JPG · PNG · up to 32 MB</p>
+          </div>
+        </template>
+        <template x-if="previewUrl">
+          <img :src="previewUrl" class="max-h-48 mx-auto rounded-lg object-contain" />
+        </template>
+      </div>
+      <input type="file" x-ref="fileInput" accept="image/*" class="hidden"
+             @change="handleFile($event)" />
+
+      <button @click="startAnalysis()"
+        :disabled="!selectedFile || analyzing"
+        :class="(!selectedFile || analyzing)
+                 ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                 : 'bg-emerald-600 hover:bg-emerald-700 text-white'"
+        class="w-full mt-4 text-sm font-medium rounded-lg py-2.5 transition-colors"
+        x-text="analyzing ? t('analyzing') : t('analyze')"></button>
+    </div>
+
+    <!-- Analysis Progress Card -->
+    <div class="bg-white rounded-xl border border-slate-200 p-5"
+         x-show="analyzing || phase1Ready || phase2Ready">
+      <h2 class="text-sm font-medium text-slate-600 uppercase tracking-wider mb-4">
+        Analysis Status
+      </h2>
+      <div class="space-y-2.5">
+        <template x-for="step in steps" :key="step.key">
+          <div class="flex items-center gap-3">
+            <div :class="{
+              'bg-emerald-500': step.done,
+              'bg-blue-500 animate-pulse': step.running,
+              'bg-slate-200': !step.done && !step.running
+            }" class="w-2 h-2 rounded-full flex-shrink-0"></div>
+            <span class="text-xs text-slate-600" x-text="step.label"></span>
+            <template x-if="step.key === 'ma' && step.running">
+              <span class="ml-auto text-xs text-slate-400" x-text="maProgressPct + '%'"></span>
+            </template>
+            <template x-if="step.key === 'ma' && step.done">
+              <span class="ml-auto text-xs text-emerald-600" x-text="(results?.results?.ma?.count || 0) + ' clusters'"></span>
+            </template>
+          </div>
+        </template>
+      </div>
+
+      <!-- MA Progress Bar -->
+      <div x-show="steps.find(s=>s.key==='ma')?.running" class="mt-3">
+        <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div class="h-full bg-blue-500 transition-all duration-300"
+               :style="`width: ${maProgressPct}%`"></div>
+        </div>
+        <p class="text-xs text-slate-400 mt-1 text-center"
+           x-text="t('ma_running') + ' (' + maProgressPct + '%)'"></p>
+      </div>
+    </div>
+
+    <!-- Report Buttons -->
+    <div class="space-y-2" x-show="phase1Ready">
+      <button @click="downloadReport(1)"
+        :disabled="reportLoading"
+        class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium
+               rounded-lg py-2.5 transition-colors flex items-center justify-center gap-2">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <span x-text="t('generate_report_p1')"></span>
+      </button>
+
+      <button @click="downloadReport(2)"
+        :disabled="!phase2Ready || reportLoading"
+        :class="phase2Ready ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'"
+        class="w-full text-sm font-medium rounded-lg py-2.5 transition-colors
+               flex items-center justify-center gap-2">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <span x-text="phase2Ready ? t('generate_report_p2') : t('ma_running')"></span>
+      </button>
+    </div>
+
+  </div><!-- end left panel -->
+
+
+  <!-- ── RIGHT PANEL ── Results ──────────────────────────────────────────── -->
+  <div class="lg:col-span-2 space-y-4">
+
+    <!-- Placeholder -->
+    <div x-show="!phase1Ready && !analyzing"
+         class="bg-white rounded-xl border border-slate-200 p-12 text-center">
+      <div class="text-5xl mb-4">👁</div>
+      <p class="text-slate-400 text-sm">Enter patient details and upload a fundus image to begin analysis.</p>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="analyzing && !phase1Ready"
+         class="bg-white rounded-xl border border-slate-200 p-12 text-center">
+      <div class="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+      <p class="text-slate-500 text-sm" x-text="statusMsg"></p>
+    </div>
+
+    <!-- Results tabs -->
+    <div x-show="phase1Ready" class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+
+      <!-- Tab bar -->
+      <div class="border-b border-slate-200 flex overflow-x-auto">
+        <template x-for="tab in tabs" :key="tab.key">
+          <button @click="activeTab = tab.key"
+            :class="activeTab === tab.key
+                     ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
+                     : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'"
+            class="px-5 py-3 text-xs font-medium whitespace-nowrap transition-colors"
+            x-text="tab.label"></button>
+        </template>
+      </div>
+
+      <!-- ── DR Grading ─────────────────────────────────────────────────── -->
+      <div x-show="activeTab === 'drg'" class="p-6">
+        <h3 class="text-base font-medium text-slate-700 mb-4" x-text="t('dr_grading')"></h3>
+        <div class="grid grid-cols-2 gap-4">
+          <img :src="'data:image/png;base64,' + results?.original_b64"
+               class="rounded-xl w-full object-contain max-h-64" />
+          <div class="flex flex-col justify-center">
+            <div class="text-3xl font-light mb-2"
+                 :class="drGradeColor(results?.results?.drg?.level)"
+                 x-text="results?.results?.drg?.grade || '—'"></div>
+            <div class="text-sm text-slate-500">
+              Level <span x-text="results?.results?.drg?.level"></span> / 4
+            </div>
+            <div class="mt-4 text-xs text-slate-400 leading-relaxed" x-html="drDescription(results?.results?.drg?.grade)"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── OD/OC ──────────────────────────────────────────────────────── -->
+      <div x-show="activeTab === 'odoc'" class="p-6">
+        <h3 class="text-base font-medium text-slate-700 mb-1" x-text="t('odoc')"></h3>
+        <p class="text-xs text-slate-400 mb-4" x-text="t('odoc_color_key')"></p>
+        <div class="grid grid-cols-2 gap-4 mb-6">
+          <div>
+            <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Segmentation</div>
+            <img :src="'data:image/png;base64,' + results?.results?.odoc?.raw_b64"
+                 class="rounded-xl w-full object-contain max-h-64" />
+          </div>
+          <div>
+            <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Overlay + Quadrants</div>
+            <img :src="'data:image/png;base64,' + results?.results?.odoc?.overlay_b64"
+                 class="rounded-xl w-full object-contain max-h-64" />
+          </div>
+        </div>
+
+        <!-- Measurements -->
+        <template x-if="results?.results?.odoc?.measurements?.vcdr !== undefined">
+          <div>
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
+              Morphometric Measurements
+            </div>
+            <div class="grid grid-cols-3 gap-3 mb-4">
+              <div class="bg-slate-50 rounded-xl p-3 text-center">
+                <div class="text-xs text-slate-400 mb-1" x-text="t('vcdr')"></div>
+                <div class="text-2xl font-light"
+                     :class="cdrColor(results.results.odoc.measurements.vcdr)"
+                     x-text="results.results.odoc.measurements.vcdr?.toFixed(3)"></div>
+              </div>
+              <div class="bg-slate-50 rounded-xl p-3 text-center">
+                <div class="text-xs text-slate-400 mb-1" x-text="t('hcdr')"></div>
+                <div class="text-2xl font-light text-slate-600"
+                     x-text="results.results.odoc.measurements.hcdr?.toFixed(3)"></div>
+              </div>
+              <div class="bg-slate-50 rounded-xl p-3 text-center">
+                <div class="text-xs text-slate-400 mb-1" x-text="t('area_cdr')"></div>
+                <div class="text-2xl font-light text-slate-600"
+                     x-text="results.results.odoc.measurements.area_cdr?.toFixed(3)"></div>
+              </div>
+            </div>
+
+            <!-- Quadrant rim chart -->
+            <div class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
+              Rim Area by Quadrant (ISNT Rule)
+            </div>
+            <div class="grid grid-cols-4 gap-2">
+              <template x-for="q in quadrantData()" :key="q.label">
+                <div class="bg-slate-50 rounded-xl p-2.5 text-center">
+                  <div class="text-lg font-light text-slate-700" x-text="q.label"></div>
+                  <div class="text-base font-medium text-slate-800 mt-1" x-text="q.pct + '%'"></div>
+                  <div class="h-1 rounded-full mt-2"
+                       :class="q.ok ? 'bg-emerald-400' : 'bg-amber-400'"
+                       :style="`width: ${Math.min(q.pct, 100)}%`"></div>
+                </div>
+              </template>
+            </div>
+            <div class="mt-2 text-xs px-3 py-2 rounded-lg"
+                 :class="results.results.odoc.measurements.isnt_normal
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-amber-50 text-amber-700'"
+                 x-text="t(results.results.odoc.measurements.isnt_normal ? 'isnt_normal' : 'isnt_abnormal')"></div>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── Lesion Detection ───────────────────────────────────────────── -->
+      <div x-show="activeTab === 'lesion'" class="p-6">
+        <h3 class="text-base font-medium text-slate-700 mb-1" x-text="t('lesion')"></h3>
+        <p class="text-xs text-slate-400 mb-2" x-text="t('lesion_color_key')"></p>
+        <!-- Model availability notice -->
+        <template x-if="results?.results?.lesion?.model_available === false">
+          <div class="mb-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <span class="font-semibold">Note:</span>
+            Deep learning lesion model (UNet+FIAM IDRiD) is not available.
+            Results shown are from a classical image processing fallback — for reference only, not clinical grade.
+          </div>
+        </template>
+        <div class="grid grid-cols-2 gap-4 mb-6">
+          <div>
+            <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Segmentation</div>
+            <img :src="'data:image/png;base64,' + results?.results?.lesion?.image_b64"
+                 class="rounded-xl w-full object-contain max-h-64" />
+          </div>
+          <div>
+            <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Overlay</div>
+            <img :src="'data:image/png;base64,' + results?.results?.lesion?.blend_b64"
+                 class="rounded-xl w-full object-contain max-h-64" />
+          </div>
+        </div>
+        <template x-if="results?.results?.lesion?.areas">
+          <div class="grid grid-cols-2 gap-3">
+            <template x-for="[label, val, color] in lesionAreas()" :key="label">
+              <div class="flex items-center gap-3 bg-slate-50 rounded-xl p-3">
+                <div class="w-3 h-3 rounded-sm flex-shrink-0" :style="`background:${color}`"></div>
+                <div>
+                  <div class="text-xs text-slate-500" x-text="label"></div>
+                  <div class="text-sm font-medium text-slate-700" x-text="val + ' px²'"></div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── Glaucoma ──────────────────────────────────────────────────── -->
+      <div x-show="activeTab === 'glaucoma'" class="p-6">
+        <h3 class="text-base font-medium text-slate-700 mb-4" x-text="t('glaucoma')"></h3>
+        <div class="grid grid-cols-2 gap-6">
+          <img :src="'data:image/png;base64,' + results?.original_b64"
+               class="rounded-xl w-full object-contain max-h-64" />
+          <div class="flex flex-col justify-center">
+            <div class="text-2xl font-light mb-2 text-slate-700"
+                 x-text="results?.results?.glaucoma?.grade || '—'"></div>
+
+            <!-- CDR refinement notice -->
+            <template x-if="results?.results?.glaucoma?.raw_grade &&
+                             results?.results?.glaucoma?.raw_grade !== results?.results?.glaucoma?.grade">
+              <div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+                <span class="font-semibold">CDR-refined:</span>
+                Model said "<span x-text="results.results.glaucoma.raw_grade"></span>" —
+                <span x-text="results.results.glaucoma.cdr_reason"></span>
+              </div>
+            </template>
+            <template x-if="results?.results?.glaucoma?.raw_grade &&
+                             results?.results?.glaucoma?.raw_grade === results?.results?.glaucoma?.grade">
+              <div class="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-1.5 mb-2">
+                CDR analysis confirms model prediction
+              </div>
+            </template>
+
+            <div class="text-xs text-slate-400 mt-2 leading-relaxed"
+                 x-html="glaucomaDesc(results?.results?.glaucoma?.grade)"></div>
+
+            <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div class="bg-slate-50 rounded-lg p-2">
+                <div class="text-slate-400">Vertical CDR</div>
+                <div class="font-medium"
+                     :class="cdrColor(results?.results?.odoc?.measurements?.vcdr)"
+                     x-text="results?.results?.odoc?.measurements?.vcdr?.toFixed(3) || '—'"></div>
+              </div>
+              <div class="bg-slate-50 rounded-lg p-2">
+                <div class="text-slate-400">ISNT Rule</div>
+                <div class="font-medium"
+                     :class="results?.results?.odoc?.measurements?.isnt_normal == null ? 'text-slate-400' :
+                              results?.results?.odoc?.measurements?.isnt_normal ? 'text-emerald-600' : 'text-amber-600'"
+                     x-text="results?.results?.odoc?.measurements?.isnt_normal == null ? '—' :
+                              results?.results?.odoc?.measurements?.isnt_normal ? 'Normal' : 'Violated'"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── MA Detection ──────────────────────────────────────────────── -->
+      <div x-show="activeTab === 'ma'" class="p-6">
+        <h3 class="text-base font-medium text-slate-700 mb-1" x-text="t('ma')"></h3>
+
+        <div x-show="!phase2Ready" class="text-center py-8">
+          <div class="w-10 h-10 border-4 border-slate-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-3"></div>
+          <p class="text-sm text-slate-400" x-text="t('ma_running') + ' — ' + maProgressPct + '%'"></p>
+          <div class="mt-3 h-2 bg-slate-100 rounded-full max-w-xs mx-auto overflow-hidden">
+            <div class="h-full bg-blue-500 transition-all duration-300"
+                 :style="`width: ${maProgressPct}%`"></div>
+          </div>
+        </div>
+
+        <div x-show="phase2Ready">
+          <div class="mb-4 flex items-center gap-3">
+            <div class="text-3xl font-light text-red-500"
+                 x-text="results?.results?.ma?.count || 0"></div>
+            <div class="text-sm text-slate-500" x-text="t('ma_count')"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Probability Overlay</div>
+              <img :src="'data:image/png;base64,' + results?.results?.ma?.overlay_b64"
+                   class="rounded-xl w-full object-contain max-h-64" />
+            </div>
+            <div>
+              <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Detected Clusters</div>
+              <img :src="'data:image/png;base64,' + results?.results?.ma?.image_b64"
+                   class="rounded-xl w-full object-contain max-h-64" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end results card -->
+  </div><!-- end right panel -->
+
+</div><!-- end grid -->
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

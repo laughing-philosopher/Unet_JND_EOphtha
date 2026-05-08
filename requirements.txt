@@ -1,0 +1,32 @@
+# Aakhi — Retinal Image Analysis
+# Install: pip install -r requirements.txt
+
+# ── Web framework ─────────────────────────────────────────────────────────
+flask>=3.0
+
+# ── Deep learning ─────────────────────────────────────────────────────────
+torch
+torchvision
+torchaudio
+timm
+tensorflow
+
+# ── Image processing ──────────────────────────────────────────────────────
+pillow
+opencv-python
+numpy
+scipy
+scikit-learn
+albumentations
+
+# ── Report generation ─────────────────────────────────────────────────────
+reportlab
+fpdf2
+
+# ── Utilities ─────────────────────────────────────────────────────────────
+tqdm
+matplotlib
+
+# ── Streamlit (legacy app.py still works) ─────────────────────────────────
+streamlit
+streamlit-image-coordinates

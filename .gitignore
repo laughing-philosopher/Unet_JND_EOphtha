@@ -1,0 +1,46 @@
+# Virtual environments
+env
+venv
+.venv
+
+# Cache
+__pycache__
+*.pyc
+*.pyo
+
+# Jupyter
+test.ipynb
+*.ipynb
+
+# Test files
+test.py
+
+
+# Large model files (too big for GitHub)
+models/*.h5
+models/*.bin
+models/*.pt
+models/*.pth
+models/*.keras
+models/*.pkl
+
+# PyInstaller output (too large for GitHub — zip dist\Aakhi\ to share)
+build/
+dist/
+
+# Fonts (downloaded by download_fonts.py)
+fonts/
+
+# Portable Python (for USB distribution)
+python/
+
+# Auth data (local only)
+users.json
+
+# Test PDFs
+test_report_*.pdf
+
+# OS files
+.DS_Store
+Thumbs.db
+
