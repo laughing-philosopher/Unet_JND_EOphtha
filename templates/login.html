@@ -9,96 +9,106 @@
     body { font-family: 'Segoe UI', system-ui, sans-serif; }
   </style>
 </head>
-<body class="bg-slate-50 min-h-screen flex items-center justify-center">
+<body class="bg-gradient-to-br from-blue-50 via-slate-50 to-indigo-100 min-h-screen relative">
 
-<div class="w-full max-w-sm">
-
-  <!-- Logo / Brand -->
-  <div class="text-center mb-8">
-    <div class="flex justify-center mb-3">
-      <img src="/static/images/aakhi_logo.png" class="h-20 w-20 object-contain drop-shadow-sm" alt="Aakhi logo" />
+  <!-- Logo — top right -->
+  <div class="absolute top-6 right-8 flex items-center gap-3">
+    <div class="text-right">
+      <div class="text-xs text-slate-500 font-medium">IIT Bhubaneswar</div>
+      <div class="text-xs text-blue-600 font-semibold tracking-wide">IVP Lab</div>
     </div>
-    <div class="text-3xl font-bold tracking-widest text-slate-800">AAKHI</div>
-    <div class="text-sm text-slate-500 mt-1 font-medium">AI Assisted Kit for Human Intraocular Imaging</div>
-    <div class="text-xs text-blue-500 mt-1 tracking-wide font-medium">Simple. Offline. Retinal Screening.</div>
-    <div class="text-xs text-slate-400 mt-1">IIT Bhubaneswar · Eye AI Lab</div>
+    <img src="/static/images/aakhi_logo.png" class="h-20 w-20 object-contain drop-shadow-md" alt="Aakhi logo" />
   </div>
 
-  <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-    <h2 class="text-lg font-medium text-slate-700 mb-6">Sign in</h2>
+  <!-- Main content -->
+  <div class="flex flex-col items-center justify-center min-h-screen px-4 pt-16">
 
-    {% if error %}
-    <div class="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-      {{ error }}
-    </div>
-    {% endif %}
-
-    <form method="post" action="/login" id="loginForm">
-      <div class="mb-4">
-        <label class="block text-xs font-medium text-slate-500 mb-1 uppercase tracking-wider">
-          Username
-        </label>
-        <input type="text" name="username" id="username" required autofocus
-          class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm
-                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                 text-slate-700 placeholder-slate-300"
-          placeholder="username" />
-      </div>
-
-      <div class="mb-6">
-        <label class="block text-xs font-medium text-slate-500 mb-1 uppercase tracking-wider">
-          Password
-        </label>
-        <input type="password" name="password" id="password" required
-          class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm
-                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                 text-slate-700 placeholder-slate-300"
-          placeholder="••••••••" />
-      </div>
-
-      <button type="submit"
-        class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium
-               rounded-lg py-2.5 transition-colors">
-        Sign in
-      </button>
-    </form>
-
-    <div class="mt-4 text-center">
-      <div class="text-xs text-slate-400 mb-2">— or —</div>
-      <a href="/login" id="guestBtn"
-        class="w-full block text-center border border-slate-200 hover:bg-slate-50
-               text-slate-500 text-sm rounded-lg py-2 transition-colors">
-        Continue as Guest
-      </a>
+    <!-- Branding -->
+    <div class="text-center mb-10">
+      <div class="text-5xl font-bold tracking-widest text-slate-800 mb-2">AAKHI</div>
+      <div class="text-base text-slate-500 font-medium">AI Assisted Kit for Human Intraocular Imaging</div>
+      <div class="text-sm text-blue-500 mt-1.5 tracking-wide font-medium">Simple. Offline. Retinal Screening.</div>
     </div>
 
-    <details class="mt-6">
-      <summary class="text-xs text-slate-400 cursor-pointer hover:text-slate-600 select-none">
-        Register new account
-      </summary>
-      <div class="mt-3 pt-3 border-t border-slate-100" id="registerSection">
-        <input type="text" id="reg_username" placeholder="Username"
-          class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-2
-                 focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700" />
-        <input type="text" id="reg_fullname" placeholder="Full Name"
-          class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-2
-                 focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700" />
-        <input type="password" id="reg_password" placeholder="Password"
-          class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3
-                 focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700" />
-        <button onclick="doRegister()"
-          class="w-full bg-slate-700 hover:bg-slate-800 text-white text-sm rounded-lg py-2 transition-colors">
-          Create Account
-        </button>
-        <p id="regMsg" class="text-xs mt-2 text-center"></p>
+    <!-- Login card -->
+    <div class="w-full max-w-sm">
+      <div class="bg-white rounded-2xl shadow-md border border-slate-200 p-8">
+        <h2 class="text-lg font-semibold text-slate-700 mb-6">Sign in</h2>
+
+        {% if error %}
+        <div class="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="post" action="/login" id="loginForm">
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-slate-500 mb-1 uppercase tracking-wider">
+              Username
+            </label>
+            <input type="text" name="username" id="username" required autofocus
+              class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                     text-slate-700 placeholder-slate-300"
+              placeholder="username" />
+          </div>
+
+          <div class="mb-6">
+            <label class="block text-xs font-medium text-slate-500 mb-1 uppercase tracking-wider">
+              Password
+            </label>
+            <input type="password" name="password" id="password" required
+              class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                     text-slate-700 placeholder-slate-300"
+              placeholder="••••••••" />
+          </div>
+
+          <button type="submit"
+            class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium
+                   rounded-lg py-2.5 transition-colors">
+            Sign in
+          </button>
+        </form>
+
+        <div class="mt-4 text-center">
+          <div class="text-xs text-slate-400 mb-2">— or —</div>
+          <a href="/login" id="guestBtn"
+            class="w-full block text-center border border-slate-200 hover:bg-slate-50
+                   text-slate-500 text-sm rounded-lg py-2 transition-colors">
+            Continue as Guest
+          </a>
+        </div>
+
+        <details class="mt-6">
+          <summary class="text-xs text-slate-400 cursor-pointer hover:text-slate-600 select-none">
+            Register new account
+          </summary>
+          <div class="mt-3 pt-3 border-t border-slate-100" id="registerSection">
+            <input type="text" id="reg_username" placeholder="Username"
+              class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-2
+                     focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700" />
+            <input type="text" id="reg_fullname" placeholder="Full Name"
+              class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-2
+                     focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700" />
+            <input type="password" id="reg_password" placeholder="Password"
+              class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3
+                     focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-700" />
+            <button onclick="doRegister()"
+              class="w-full bg-slate-700 hover:bg-slate-800 text-white text-sm rounded-lg py-2 transition-colors">
+              Create Account
+            </button>
+            <p id="regMsg" class="text-xs mt-2 text-center"></p>
+          </div>
+        </details>
       </div>
-    </details>
+
+      <p class="text-center text-xs text-slate-400 mt-6">
+        Default credentials: admin / password
+      </p>
+    </div>
+
   </div>
-
-  <p class="text-center text-xs text-slate-300 mt-6">
-    Default credentials: admin / password
-  </p>
-</div>
 
 <script>
 document.getElementById("guestBtn").addEventListener("click", async (e) => {
