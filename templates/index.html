@@ -11,24 +11,26 @@
 <body class="bg-slate-50 min-h-screen" x-data="aakhi()" x-init="init()">
 
 <!-- ── Navigation ──────────────────────────────────────────────────────── -->
-<nav class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
+<nav class="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center justify-between shadow-sm">
   <div class="flex items-center gap-3">
-    <span class="text-xl font-light tracking-widest text-slate-700" x-text="t('app_title')">AAKHI</span>
-    <span class="text-xs text-slate-400 tracking-wider hidden sm:block" x-text="t('app_subtitle')"></span>
+    <img src="/static/images/aakhi_logo.png" class="h-10 w-10 object-contain" alt="Aakhi" />
+    <div>
+      <div class="text-base font-bold tracking-widest text-slate-800 leading-tight">AAKHI</div>
+      <div class="text-xs text-blue-500 font-medium leading-tight tracking-wide">Simple. Offline. Retinal Screening.</div>
+    </div>
   </div>
   <div class="flex items-center gap-4">
     <!-- Language selector -->
-    <div class="flex items-center gap-1">
-      <span class="text-xs text-slate-400">Lang:</span>
+    <div class="flex items-center gap-1 bg-slate-50 rounded-lg px-2 py-1 border border-slate-100">
       <template x-for="l in languages" :key="l.code">
         <button @click="switchLang(l.code)"
-          :class="lang === l.code ? 'bg-blue-100 text-blue-700 font-medium' : 'text-slate-500 hover:bg-slate-100'"
-          class="text-xs px-2 py-0.5 rounded transition-colors"
+          :class="lang === l.code ? 'bg-blue-600 text-white font-semibold shadow-sm' : 'text-slate-500 hover:bg-white hover:text-slate-700'"
+          class="text-xs px-2 py-0.5 rounded transition-all"
           x-text="l.label"></button>
       </template>
     </div>
-    <div class="text-xs text-slate-400">{{ user.full_name }}</div>
-    <a href="/logout" class="text-xs text-slate-400 hover:text-slate-700 transition-colors">
+    <div class="text-xs text-slate-500 font-medium hidden sm:block">{{ user.full_name }}</div>
+    <a href="/logout" class="text-xs text-slate-400 hover:text-red-500 transition-colors border border-slate-200 hover:border-red-200 rounded px-2 py-0.5">
       Sign out
     </a>
   </div>
@@ -41,20 +43,20 @@
   <div class="lg:col-span-1 space-y-4">
 
     <!-- Patient Info Card -->
-    <div class="bg-white rounded-xl border border-slate-200 p-5">
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-sm font-medium text-slate-600 uppercase tracking-wider"
-            x-text="t('patient_info')"></h2>
+        <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-widest"
+            x-text="tb('patient_info')"></h2>
         <button x-show="patientConfirmed" @click="resetPatient()"
-          class="text-xs text-slate-400 hover:text-slate-600 transition-colors"
-          x-text="t('change_patient')"></button>
+          class="text-xs text-blue-500 hover:text-blue-700 transition-colors font-medium"
+          x-text="tb('change_patient')"></button>
       </div>
 
       <!-- Input form -->
       <div x-show="!patientConfirmed" class="space-y-3">
         <div>
-          <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider"
-                 x-text="t('patient_name')"></label>
+          <label class="block text-xs text-slate-400 mb-1 font-medium"
+                 x-text="tb('patient_name')"></label>
           <input x-model="patient.name" type="text"
             class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
                    focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700"
@@ -62,38 +64,38 @@
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider"
-                   x-text="t('patient_age')"></label>
+            <label class="block text-xs text-slate-400 mb-1 font-medium"
+                   x-text="tb('patient_age')"></label>
             <input x-model="patient.age" type="number" min="1" max="120"
               class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
                      focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700" />
           </div>
           <div>
-            <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider"
-                   x-text="t('patient_gender')"></label>
+            <label class="block text-xs text-slate-400 mb-1 font-medium"
+                   x-text="tb('patient_gender')"></label>
             <select x-model="patient.gender"
               class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
                      focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
-              <option value="Male" x-text="t('male')"></option>
-              <option value="Female" x-text="t('female')"></option>
-              <option value="Other" x-text="t('other')"></option>
+              <option value="Male" x-text="tb('male')"></option>
+              <option value="Female" x-text="tb('female')"></option>
+              <option value="Other" x-text="tb('other')"></option>
             </select>
           </div>
         </div>
         <div>
-          <label class="block text-xs text-slate-400 mb-1 uppercase tracking-wider"
-                 x-text="t('patient_eye')"></label>
+          <label class="block text-xs text-slate-400 mb-1 font-medium"
+                 x-text="tb('patient_eye')"></label>
           <select x-model="patient.eye"
             class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
                    focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
-            <option value="Right Eye (OD)" x-text="t('right_eye')"></option>
-            <option value="Left Eye (OS)" x-text="t('left_eye')"></option>
+            <option value="Right Eye (OD)" x-text="tb('right_eye')"></option>
+            <option value="Left Eye (OS)" x-text="tb('left_eye')"></option>
           </select>
         </div>
         <button @click="confirmPatient()"
-          class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium
-                 rounded-lg py-2.5 transition-colors"
-          x-text="t('confirm_patient')"></button>
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold
+                 rounded-lg py-2.5 transition-colors shadow-sm"
+          x-text="tb('confirm_patient')"></button>
       </div>
 
       <!-- Confirmed banner -->
@@ -108,9 +110,9 @@
     </div>
 
     <!-- Upload Card -->
-    <div class="bg-white rounded-xl border border-slate-200 p-5" x-show="patientConfirmed">
-      <h2 class="text-sm font-medium text-slate-600 uppercase tracking-wider mb-4"
-          x-text="t('upload_image')"></h2>
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm" x-show="patientConfirmed">
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4"
+          x-text="tb('upload_image')"></h2>
 
       <div class="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center
                   hover:border-blue-300 transition-colors cursor-pointer"
@@ -137,31 +139,27 @@
         :disabled="!selectedFile || analyzing"
         :class="(!selectedFile || analyzing)
                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                 : 'bg-emerald-600 hover:bg-emerald-700 text-white'"
-        class="w-full mt-4 text-sm font-medium rounded-lg py-2.5 transition-colors"
-        x-text="analyzing ? t('analyzing') : t('analyze')"></button>
+                 : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'"
+        class="w-full mt-4 text-sm font-semibold rounded-lg py-2.5 transition-colors"
+        x-text="analyzing ? tb('analyzing') : tb('analyze')"></button>
     </div>
 
     <!-- Analysis Progress Card -->
-    <div class="bg-white rounded-xl border border-slate-200 p-5"
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm"
          x-show="analyzing || phase1Ready || phase2Ready">
-      <h2 class="text-sm font-medium text-slate-600 uppercase tracking-wider mb-4">
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">
         Analysis Status
       </h2>
-      <div class="space-y-2.5">
+      <div class="space-y-3">
         <template x-for="step in steps" :key="step.key">
           <div class="flex items-center gap-3">
-            <div :class="{
-              'bg-emerald-500': step.done,
-              'bg-blue-500 animate-pulse': step.running,
-              'bg-slate-200': !step.done && !step.running
-            }" class="w-2 h-2 rounded-full flex-shrink-0"></div>
-            <span class="text-xs text-slate-600" x-text="step.label"></span>
+            <div :class="stepDotClass(step)" class="flex-shrink-0"></div>
+            <span :class="stepLabelClass(step)" x-text="step.label"></span>
             <template x-if="step.key === 'ma' && step.running">
-              <span class="ml-auto text-xs text-slate-400" x-text="maProgressPct + '%'"></span>
+              <span class="ml-auto text-xs text-red-400 font-medium" x-text="maProgressPct + '%'"></span>
             </template>
             <template x-if="step.key === 'ma' && step.done">
-              <span class="ml-auto text-xs text-emerald-600" x-text="(results?.results?.ma?.count || 0) + ' clusters'"></span>
+              <span class="ml-auto text-xs text-emerald-600 font-medium" x-text="(results?.results?.ma?.count || 0) + ' clusters'"></span>
             </template>
           </div>
         </template>
@@ -170,11 +168,11 @@
       <!-- MA Progress Bar -->
       <div x-show="steps.find(s=>s.key==='ma')?.running" class="mt-3">
         <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-          <div class="h-full bg-blue-500 transition-all duration-300"
+          <div class="h-full bg-red-400 transition-all duration-300"
                :style="`width: ${maProgressPct}%`"></div>
         </div>
-        <p class="text-xs text-slate-400 mt-1 text-center"
-           x-text="t('ma_running') + ' (' + maProgressPct + '%)'"></p>
+        <p class="text-xs text-red-400 mt-1 text-center font-medium"
+           x-text="tb('ma_running') + ' (' + maProgressPct + '%)'"></p>
       </div>
     </div>
 
@@ -182,25 +180,25 @@
     <div class="space-y-2" x-show="phase1Ready">
       <button @click="downloadReport(1)"
         :disabled="reportLoading"
-        class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium
-               rounded-lg py-2.5 transition-colors flex items-center justify-center gap-2">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold
+               rounded-lg py-2.5 transition-colors flex items-center justify-center gap-2 shadow-sm">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        <span x-text="t('generate_report_p1')"></span>
+        <span x-text="tb('generate_report_p1')"></span>
       </button>
 
       <button @click="downloadReport(2)"
         :disabled="!phase2Ready || reportLoading"
-        :class="phase2Ready ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'"
-        class="w-full text-sm font-medium rounded-lg py-2.5 transition-colors
+        :class="phase2Ready ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm' : 'bg-slate-100 text-slate-400 cursor-not-allowed'"
+        class="w-full text-sm font-semibold rounded-lg py-2.5 transition-colors
                flex items-center justify-center gap-2">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        <span x-text="phase2Ready ? t('generate_report_p2') : t('ma_running')"></span>
+        <span x-text="phase2Ready ? tb('generate_report_p2') : tb('ma_running')"></span>
       </button>
     </div>
 
@@ -212,16 +210,19 @@
 
     <!-- Placeholder -->
     <div x-show="!phase1Ready && !analyzing"
-         class="bg-white rounded-xl border border-slate-200 p-12 text-center">
-      <div class="text-5xl mb-4">👁</div>
+         class="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
+      <div class="flex justify-center mb-4">
+        <img src="/static/images/aakhi_logo.png" class="h-16 w-16 object-contain opacity-20" alt="" />
+      </div>
       <p class="text-slate-400 text-sm">Enter patient details and upload a fundus image to begin analysis.</p>
+      <p class="text-xs text-slate-300 mt-1">Simple. Offline. Retinal Screening.</p>
     </div>
 
     <!-- Loading -->
     <div x-show="analyzing && !phase1Ready"
-         class="bg-white rounded-xl border border-slate-200 p-12 text-center">
+         class="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
       <div class="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-      <p class="text-slate-500 text-sm" x-text="statusMsg"></p>
+      <p class="text-slate-500 text-sm font-medium" x-text="statusMsg"></p>
     </div>
 
     <!-- Results tabs -->
@@ -241,25 +242,29 @@
 
       <!-- ── DR Grading ─────────────────────────────────────────────────── -->
       <div x-show="activeTab === 'drg'" class="p-6">
-        <h3 class="text-base font-medium text-slate-700 mb-4" x-text="t('dr_grading')"></h3>
+        <h3 class="text-base font-semibold text-blue-700 mb-4" x-text="tb('dr_grading')"></h3>
         <div class="grid grid-cols-2 gap-4">
           <img :src="'data:image/png;base64,' + results?.original_b64"
-               class="rounded-xl w-full object-contain max-h-64" />
+               class="rounded-xl w-full object-contain max-h-64 shadow-sm" />
           <div class="flex flex-col justify-center">
-            <div class="text-3xl font-light mb-2"
+            <div class="text-2xl font-bold mb-1"
                  :class="drGradeColor(results?.results?.drg?.level)"
-                 x-text="results?.results?.drg?.grade || '—'"></div>
-            <div class="text-sm text-slate-500">
+                 x-text="tGrade(results?.results?.drg?.grade) || '—'"></div>
+            <template x-if="lang !== 'en' && results?.results?.drg?.grade">
+              <div class="text-sm text-slate-400 mb-1" x-text="results.results.drg.grade"></div>
+            </template>
+            <div class="text-xs text-slate-400">
               Level <span x-text="results?.results?.drg?.level"></span> / 4
             </div>
-            <div class="mt-4 text-xs text-slate-400 leading-relaxed" x-html="drDescription(results?.results?.drg?.grade)"></div>
+            <div class="mt-3 text-xs text-slate-500 leading-relaxed bg-slate-50 rounded-lg p-3"
+                 x-html="drDescription(results?.results?.drg?.grade)"></div>
           </div>
         </div>
       </div>
 
       <!-- ── OD/OC ──────────────────────────────────────────────────────── -->
       <div x-show="activeTab === 'odoc'" class="p-6">
-        <h3 class="text-base font-medium text-slate-700 mb-1" x-text="t('odoc')"></h3>
+        <h3 class="text-base font-semibold text-purple-700 mb-1" x-text="tb('odoc')"></h3>
         <p class="text-xs text-slate-400 mb-4" x-text="t('odoc_color_key')"></p>
         <div class="grid grid-cols-2 gap-4 mb-6">
           <div>
@@ -325,7 +330,7 @@
 
       <!-- ── Lesion Detection ───────────────────────────────────────────── -->
       <div x-show="activeTab === 'lesion'" class="p-6">
-        <h3 class="text-base font-medium text-slate-700 mb-1" x-text="t('lesion')"></h3>
+        <h3 class="text-base font-semibold text-orange-600 mb-1" x-text="tb('lesion')"></h3>
         <p class="text-xs text-slate-400 mb-2" x-text="t('lesion_color_key')"></p>
         <!-- Model availability notice -->
         <template x-if="results?.results?.lesion?.model_available === false">
@@ -364,13 +369,16 @@
 
       <!-- ── Glaucoma ──────────────────────────────────────────────────── -->
       <div x-show="activeTab === 'glaucoma'" class="p-6">
-        <h3 class="text-base font-medium text-slate-700 mb-4" x-text="t('glaucoma')"></h3>
+        <h3 class="text-base font-semibold text-amber-600 mb-4" x-text="tb('glaucoma')"></h3>
         <div class="grid grid-cols-2 gap-6">
           <img :src="'data:image/png;base64,' + results?.original_b64"
-               class="rounded-xl w-full object-contain max-h-64" />
+               class="rounded-xl w-full object-contain max-h-64 shadow-sm" />
           <div class="flex flex-col justify-center">
-            <div class="text-2xl font-light mb-2 text-slate-700"
-                 x-text="results?.results?.glaucoma?.grade || '—'"></div>
+            <div class="text-xl font-bold mb-1 text-slate-700"
+                 x-text="tGrade(results?.results?.glaucoma?.grade) || '—'"></div>
+            <template x-if="lang !== 'en' && results?.results?.glaucoma?.grade">
+              <div class="text-xs text-slate-400 mb-1" x-text="results.results.glaucoma.grade"></div>
+            </template>
 
             <!-- CDR refinement notice -->
             <template x-if="results?.results?.glaucoma?.raw_grade &&
@@ -413,13 +421,13 @@
 
       <!-- ── MA Detection ──────────────────────────────────────────────── -->
       <div x-show="activeTab === 'ma'" class="p-6">
-        <h3 class="text-base font-medium text-slate-700 mb-1" x-text="t('ma')"></h3>
+        <h3 class="text-base font-semibold text-red-600 mb-1" x-text="tb('ma')"></h3>
 
         <div x-show="!phase2Ready" class="text-center py-8">
-          <div class="w-10 h-10 border-4 border-slate-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-3"></div>
-          <p class="text-sm text-slate-400" x-text="t('ma_running') + ' — ' + maProgressPct + '%'"></p>
+          <div class="w-10 h-10 border-4 border-red-100 border-t-red-500 rounded-full animate-spin mx-auto mb-3"></div>
+          <p class="text-sm text-red-500 font-medium" x-text="tb('ma_running') + ' — ' + maProgressPct + '%'"></p>
           <div class="mt-3 h-2 bg-slate-100 rounded-full max-w-xs mx-auto overflow-hidden">
-            <div class="h-full bg-blue-500 transition-all duration-300"
+            <div class="h-full bg-red-400 transition-all duration-300"
                  :style="`width: ${maProgressPct}%`"></div>
           </div>
         </div>
@@ -428,7 +436,7 @@
           <div class="mb-4 flex items-center gap-3">
             <div class="text-3xl font-light text-red-500"
                  x-text="results?.results?.ma?.count || 0"></div>
-            <div class="text-sm text-slate-500" x-text="t('ma_count')"></div>
+            <div class="text-sm text-slate-500" x-text="tb('ma_count')"></div>
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>

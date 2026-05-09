@@ -5,6 +5,7 @@ function aakhi() {
     // ── State ───────────────────────────────────────────────────────────── //
     lang: localStorage.getItem("aakhi_lang") || "en",
     i18n: {},
+    enI18n: {},
     languages: [
       { code: "en",  label: "EN" },
       { code: "hi",  label: "हि" },
@@ -52,6 +53,12 @@ function aakhi() {
 
     // ── Init ────────────────────────────────────────────────────────────── //
     async init() {
+      try {
+        const r = await fetch("/api/i18n/en");
+        this.enI18n = await r.json();
+      } catch (e) {
+        console.warn("enI18n load failed", e);
+      }
       await this.loadI18n(this.lang);
       this.updateTabLabels();
     },
@@ -72,23 +79,58 @@ function aakhi() {
       return this.i18n[key] || fallback || key;
     },
 
+    tb(key, fallback = "") {
+      if (this.lang === "en") return this.t(key, fallback);
+      const en = this.enI18n[key] || fallback || key;
+      const native = this.i18n[key] || fallback || key;
+      if (en === native) return en;
+      return `${en}  |  ${native}`;
+    },
+
+    tGrade(gradeStr) {
+      const map = {
+        "No DR":            "no_dr",
+        "Mild DR":          "mild_dr",
+        "Moderate DR":      "moderate_dr",
+        "Severe DR":        "severe_dr",
+        "Proliferative DR": "proliferative_dr",
+        "No Glaucoma":      "no_glaucoma",
+        "Glaucoma Suspect": "glaucoma_suspect",
+        "Moderate Glaucoma":"moderate_glaucoma",
+        "Advanced Glaucoma":"advanced_glaucoma",
+      };
+      const key = map[gradeStr];
+      return key ? this.t(key, gradeStr) : gradeStr;
+    },
+
+    stepDotClass(step) {
+      if (step.done) return "w-2.5 h-2.5 rounded-full bg-emerald-500";
+      const runColors = { drg:"bg-blue-500", odoc:"bg-purple-500", lesion:"bg-orange-500", glaucoma:"bg-amber-500", ma:"bg-red-500" };
+      if (step.running) return `w-2.5 h-2.5 rounded-full animate-pulse ${runColors[step.key] || "bg-blue-500"}`;
+      return "w-2.5 h-2.5 rounded-full bg-slate-200";
+    },
+
+    stepLabelClass(step) {
+      if (step.done) return "text-xs font-medium text-emerald-700";
+      const runColors = { drg:"text-blue-600", odoc:"text-purple-600", lesion:"text-orange-500", glaucoma:"text-amber-600", ma:"text-red-500" };
+      if (step.running) return `text-xs font-semibold ${runColors[step.key] || "text-blue-600"}`;
+      return "text-xs text-slate-400";
+    },
+
     async switchLang(code) {
       await this.loadI18n(code);
     },
 
     updateTabLabels() {
       const map = {
-        drg:      this.t("dr_grading",  "DR Grading"),
-        odoc:     this.t("odoc",         "OD / OC"),
-        lesion:   this.t("lesion",       "Lesions"),
-        glaucoma: this.t("glaucoma",     "Glaucoma"),
-        ma:       this.t("ma",           "MA Detection"),
+        drg:      this.tb("dr_grading",  "DR Grading"),
+        odoc:     this.tb("odoc",         "OD / OC"),
+        lesion:   this.tb("lesion",       "Lesions"),
+        glaucoma: this.tb("glaucoma",     "Glaucoma"),
+        ma:       this.tb("ma",           "MA Detection"),
       };
-      this.tabs = this.tabs.map(t => ({ ...t, label: map[t.key] || t.label }));
-      this.steps = this.steps.map(s => ({
-        ...s,
-        label: (map[s.key] || s.label),
-      }));
+      this.tabs  = this.tabs.map(t => ({ ...t, label: map[t.key] || t.label }));
+      this.steps = this.steps.map(s => ({ ...s, label: map[s.key] || s.label }));
     },
 
     // ── Patient ─────────────────────────────────────────────────────────── //
@@ -259,9 +301,10 @@ function aakhi() {
         const blob = await r.blob();
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement("a");
-        const name = this.patient.name.replace(/\s+/g, "_") || "patient";
+        const name  = this.patient.name.replace(/\s+/g, "_") || "patient";
+        const label = phase === 1 ? "Basic" : "Advanced";
         a.href     = url;
-        a.download = `Aakhi_Report_${name}_Phase${phase}.pdf`;
+        a.download = `Aakhi_${label}_Report_${name}.pdf`;
         a.click();
         URL.revokeObjectURL(url);
       } finally {

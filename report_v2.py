@@ -140,46 +140,49 @@ def _side_by_side(img_a, label_a: str, img_b, label_b: str,
     return t
 
 
-# ── Severity / description data ───────────────────────────────────────────── #
+# ── Grade → i18n key maps ─────────────────────────────────────────────────── #
 
-DR_DESCRIPTIONS = {
-    "No DR":            "No signs of diabetic retinopathy detected. The retina appears normal with no microaneurysms, haemorrhages, or exudates.",
-    "Mild DR":          "Mild non-proliferative DR. Presence of at least one microaneurysm. Regular monitoring recommended.",
-    "Moderate DR":      "Moderate non-proliferative DR. Multiple microaneurysms, dot/blot haemorrhages, and possible hard exudates. Referral to ophthalmologist advised.",
-    "Severe DR":        "Severe non-proliferative DR (pre-proliferative). More than 20 intraretinal haemorrhages in each quadrant, venous beading, or intraretinal microvascular abnormalities. Urgent referral required.",
-    "Proliferative DR": "Proliferative DR. Neovascularisation present. Risk of vitreous haemorrhage and tractional retinal detachment. Immediate ophthalmology review and treatment required.",
+_DR_GRADE_KEYS = {
+    "No DR":            "no_dr",
+    "Mild DR":          "mild_dr",
+    "Moderate DR":      "moderate_dr",
+    "Severe DR":        "severe_dr",
+    "Proliferative DR": "proliferative_dr",
+}
+_DR_DESC_KEYS = {
+    "No DR":            "dr_desc_no_dr",
+    "Mild DR":          "dr_desc_mild_dr",
+    "Moderate DR":      "dr_desc_moderate_dr",
+    "Severe DR":        "dr_desc_severe_dr",
+    "Proliferative DR": "dr_desc_proliferative_dr",
+}
+_GL_GRADE_KEYS = {
+    "No Glaucoma":       "no_glaucoma",
+    "Glaucoma Suspect":  "glaucoma_suspect",
+    "Moderate Glaucoma": "moderate_glaucoma",
+    "Advanced Glaucoma": "advanced_glaucoma",
+}
+_GL_DESC_KEYS = {
+    "No Glaucoma":       "gl_desc_no_glaucoma",
+    "Glaucoma Suspect":  "gl_desc_suspect",
+    "Moderate Glaucoma": "gl_desc_moderate",
+    "Advanced Glaucoma": "gl_desc_advanced",
+}
+_CDR_LEVEL_KEYS = {
+    "normal":    "cdr_normal",
+    "borderline":"cdr_borderline",
+    "abnormal":  "cdr_abnormal",
 }
 
-CDR_INTERPRETATION = {
-    "normal":    "CDR within normal limits (< 0.5). Low suspicion for glaucomatous optic neuropathy.",
-    "borderline":"Borderline CDR (0.5 – 0.7). Careful monitoring and visual field testing recommended.",
-    "abnormal":  "Elevated CDR (> 0.7). Highly suspicious for glaucomatous damage. Formal glaucoma evaluation required.",
-}
 
-GLAUCOMA_DESCRIPTIONS = {
-    "No Glaucoma":       "No evidence of glaucomatous optic neuropathy.",
-    "Glaucoma Suspect":  "Suspicious features for glaucoma. Full glaucoma workup including IOP, visual fields, and OCT RNFL recommended.",
-    "Moderate Glaucoma": "Moderate glaucomatous optic neuropathy with rim thinning. IOP management and regular follow-up essential.",
-    "Advanced Glaucoma": "Advanced glaucomatous damage. Significant rim loss. Urgent IOP reduction and specialist management required.",
-}
-
-FOLLOW_UP = {
-    0: "Annual screening recommended.",
-    1: "Follow-up in 6–12 months. Optimise glycaemic and blood pressure control.",
-    2: "Referral to ophthalmologist within 3–6 months.",
-    3: "Urgent ophthalmology referral within 1–3 months.",
-    4: "Immediate ophthalmology referral. Possible laser/surgical intervention.",
-}
-
-
-def _cdr_interpretation(vcdr: float) -> str:
+def _cdr_interpretation(vcdr: float, lang: str = "en") -> str:
     if vcdr < 0.5:
         key = "normal"
     elif vcdr <= 0.7:
         key = "borderline"
     else:
         key = "abnormal"
-    return CDR_INTERPRETATION[key]
+    return _t(lang, _CDR_LEVEL_KEYS[key])
 
 
 def _dr_level(grade_str: str) -> int:
@@ -244,6 +247,11 @@ def _make_styles(lang: str = "en") -> dict:
             fontName=ef, fontSize=9, leading=13,
             textColor=colors.HexColor("#1a7a1a"),
             spaceAfter=2 * mm),
+        "highlight": ParagraphStyle("highlight",
+            fontName=ef, fontSize=9, leading=13,
+            textColor=colors.HexColor("#0d2b52"),
+            backColor=colors.HexColor("#e8f0fb"),
+            borderPadding=4, spaceAfter=2 * mm),
         "font":    font,   # native script font (for translated strings)
         "en_font": ef,     # Latin font (for English technical content & patient data)
     }
@@ -333,9 +341,9 @@ def _build_story(phase, patient, doctor_name, results, original_image,
     story.append(_hr(thin=True))
 
     # ── Input fundus image ─────────────────────────────────────────────────── #
-    story += _section_header("Fundus Image", s)
+    story += _section_header(_t(lang, "original_fundus", "Original Fundus Image"), s)
     story.append(_np_to_rl(original_image, max_w_mm=130, max_h_mm=140))
-    story.append(Paragraph("Original fundus photograph", s["img_label"]))
+    story.append(Paragraph(_t(lang, "original_fundus", "Original fundus photograph"), s["img_label"]))
 
     # ── SECTION 1 — DR GRADING ─────────────────────────────────────────────── #
     story += _section_header(_t(lang, "dr_grading"), s)
@@ -347,21 +355,24 @@ def _build_story(phase, patient, doctor_name, results, original_image,
     grade_color = severity_colors[min(dr_level, 4)]
 
     ef = s["en_font"]
+    grade_display = _t(lang, _DR_GRADE_KEYS.get(dr_grade, ""), dr_grade)
     story.append(Paragraph(
         f"<b>Classification:</b> "
-        f'<font color="{grade_color}">{dr_grade}</font>  '
-        f"(Level {dr_level}/4)",
+        f'<font color="{grade_color}"><b>{grade_display}</b></font>'
+        + (f" ({dr_grade})" if lang != "en" and grade_display != dr_grade else "")
+        + f"  (Level {dr_level}/4)",
         ParagraphStyle("drg", fontName=ef, fontSize=10, spaceAfter=3 * mm)
     ))
-    dr_desc = DR_DESCRIPTIONS.get(dr_grade, "")
+    dr_desc = _t(lang, _DR_DESC_KEYS.get(dr_grade, ""), "")
     if dr_desc:
         story.append(Paragraph(f"<b>Clinical Description:</b> {dr_desc}", s["body"]))
 
+    follow_up_text = _t(lang, f"follow_up_{dr_level}", "Consult ophthalmologist.")
     story.append(_metric_table([
         ("DR Severity Level",  f"{dr_level} / 4 — {dr_grade}"),
         ("Grading Scale",      "ETDRS / International Clinical DR Disease Severity Scale"),
         ("Model",              "EfficientNet-B6 (fine-tuned, 5-class)"),
-        ("Recommended Action", FOLLOW_UP.get(dr_level, "Consult ophthalmologist.")),
+        ("Recommended Action", follow_up_text),
     ], s, font))
 
     # ── SECTION 2 — OD/OC SEGMENTATION ────────────────────────────────────── #
@@ -395,7 +406,7 @@ def _build_story(phase, patient, doctor_name, results, original_image,
         story.append(Spacer(1, 3 * mm))
         story.append(Paragraph("<b>Morphometric Measurements</b>", s["bold"]))
         story.append(_metric_table([
-            ("Vertical CDR (vCDR)",       f"{vcdr:.3f}  —  {_cdr_interpretation(vcdr)}"),
+            ("Vertical CDR (vCDR)",       f"{vcdr:.3f}  —  {_cdr_interpretation(vcdr, lang)}"),
             ("Horizontal CDR (hCDR)",     f"{hcdr:.3f}"),
             ("Area-based CDR",            f"{meas.get('area_cdr', 0):.3f}"),
             ("Optic Disc — Vertical Ø",   f"{meas.get('disc_vert_diam_px', '—')} px"),
@@ -456,11 +467,13 @@ def _build_story(phase, patient, doctor_name, results, original_image,
     glauc         = results.get("glaucoma", {})
     glaucoma_grade = glauc.get("grade", "Unknown")
 
+    gl_display = _t(lang, _GL_GRADE_KEYS.get(glaucoma_grade, ""), glaucoma_grade)
     story.append(Paragraph(
-        f"<b>Glaucoma Severity Grade:</b>  {glaucoma_grade}",
+        f"<b>Glaucoma Severity Grade:</b>  <b>{gl_display}</b>"
+        + (f" ({glaucoma_grade})" if lang != "en" and gl_display != glaucoma_grade else ""),
         ParagraphStyle("gl", fontName=ef, fontSize=10, spaceAfter=3 * mm)
     ))
-    gl_desc = GLAUCOMA_DESCRIPTIONS.get(glaucoma_grade, "")
+    gl_desc = _t(lang, _GL_DESC_KEYS.get(glaucoma_grade, ""), "")
     if gl_desc:
         story.append(Paragraph(f"<b>Clinical Interpretation:</b> {gl_desc}", s["body"]))
 
@@ -526,22 +539,25 @@ def _build_story(phase, patient, doctor_name, results, original_image,
     story.append(_metric_table(summary_rows, s, font))
 
     story += _section_header(_t(lang, "recommendations"), s)
-    rec_text = FOLLOW_UP.get(dr_level, "Consult ophthalmologist.")
-    story.append(Paragraph(f"• DR follow-up: {rec_text}", s["body"]))
+    rec_text = _t(lang, f"follow_up_{dr_level}", "Consult ophthalmologist.")
+    severity_style = s["warn"] if dr_level >= 2 else s["ok"] if dr_level == 0 else s["body"]
+    story.append(Paragraph(f"• <b>DR follow-up:</b> {rec_text}", severity_style))
     if not meas.get("isnt_normal", True) or vcdr_val > 0.65:
         story.append(Paragraph(
-            "• Optic disc: Formal glaucoma evaluation (IOP, visual fields, OCT-RNFL) recommended.",
+            "• <b>" + _t(lang, "rec_glaucoma_eval",
+                "Optic disc: Formal glaucoma evaluation (IOP, visual fields, OCT-RNFL) recommended.") + "</b>",
             s["warn"]
         ))
     if areas.get("hemorrhages", 0) > 500 or areas.get("soft_exudates", 0) > 200:
         story.append(Paragraph(
-            "• Lesion burden elevated — urgent ophthalmology review advised.",
+            "• <b>" + _t(lang, "rec_lesion_urgent",
+                "Lesion burden elevated — urgent ophthalmology review advised.") + "</b>",
             s["warn"]
         ))
     if phase == 2 and isinstance(ma_count_val, int) and ma_count_val >= 5:
         story.append(Paragraph(
-            f"• {ma_count_val} MA clusters detected — exceeds referral threshold of 5. "
-            f"Ophthalmology referral within 3 months.",
+            f"• <b>{ma_count_val} MA clusters detected — exceeds referral threshold of 5. "
+            f"Ophthalmology referral within 3 months.</b>",
             s["warn"]
         ))
 
