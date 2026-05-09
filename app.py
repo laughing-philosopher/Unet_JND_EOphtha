@@ -368,7 +368,7 @@ def main():
                     st.error(f"OD-OC inference failed: {e}")
                 
             # ------------------------------------------------------------------ #
-            #  MICROANEURYSM (MA)                                                 #
+            #  MICROANEURYSM (MA) — Advanced & Basic Modes                        #
             # ------------------------------------------------------------------ #
             st.markdown("---")
             st.subheader("Microaneurysm Detector (MA)")
@@ -392,92 +392,162 @@ def main():
                     status_text.empty()
                     progress_bar.empty()
 
-                    mask = np.array(result_ma)
-                    if mask.ndim == 3 and mask.shape[-1] == 1:
-                        mask = mask[..., 0]
-                    mask = mask.astype(np.float32)
-                    disp    = (mask * 255.0).clip(0, 255).astype(np.uint8)
-                    overlay = overlay_mask_on_rgb(image_cv2, mask > 0)
+                    # --- Unpack the dict returned by the updated processing_ma ---
+                    prob_map       = result_ma["prob_map"]
+                    baseline_mask  = result_ma["baseline_mask"]
+                    refined_mask   = result_ma["refined_mask"]
+                    adv_count      = result_ma["baseline_count"]
+                    basic_count    = result_ma["refined_count"]
+                    removed_count  = result_ma["removed_count"]
+                    removed_locs   = result_ma["removed_locations"]
 
-                    binary_mask = (mask > 0).astype(np.uint8) * 255
-                    kernel   = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
-                    dilated  = cv2.dilate(binary_mask, kernel, iterations=2)
-                    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                    circled  = image_cv2.copy()
-                    
-                    # 1. Pre-calculate all MA properties to find the largest ones
-                    ma_data = []
-                    for i, cnt in enumerate(contours):
-                        (cx, cy), radius = cv2.minEnclosingCircle(cnt)
-                        ma_data.append({
-                            "id": i + 1,
-                            "cx": int(cx),
-                            "cy": int(cy),
-                            "radius": radius,
-                            "display_radius": max(int(radius), 10)
-                        })
-                    
-                    # 2. Identify the IDs of the top 5 largest MAs by radius
-                    top_5_ids = [ma["id"] for ma in sorted(ma_data, key=lambda x: x["radius"], reverse=True)[:5]]
-                    
-                    ma_stats = []  # To store the ID and radius of each MA for the report
-                    
-                    for ma in ma_data:
-                        # 3. Determine color: RED (255,0,0) for the top 5, YELLOW (255,255,0) for others
-                        draw_color = (255, 0, 0) if ma["id"] in top_5_ids else (255, 255, 0)
-                        
-                        # Draw the circle (radius) around the MA
-                        cv2.circle(circled, (ma["cx"], ma["cy"]), ma["display_radius"], draw_color, 2)
-                        
-                        # Number the MA on the image
-                        cv2.putText(circled, str(ma["id"]), (ma["cx"] + ma["display_radius"], ma["cy"] - ma["display_radius"]), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, draw_color, 2, cv2.LINE_AA)
-                        
-                        # Save the ID and computed radius (rounded to 2 decimals)
-                        ma_stats.append((ma["id"], round(ma["radius"], 2)))
+                    # --- Probability map visualisation (shared) ---
+                    disp = (prob_map * 255.0).clip(0, 255).astype(np.uint8)
 
-                    col_a, col_b = st.columns(2)
-                    with col_a:
+                    # ============================================================ #
+                    #  Helper: build circled-cluster image from a binary mask       #
+                    # ============================================================ #
+                    def _build_circled_image(base_img, bin_mask, label_prefix=""):
+                        """Draw numbered circles around clusters in bin_mask and return (image, ma_data, ma_stats)."""
+                        bm255 = (bin_mask > 0).astype(np.uint8) * 255
+                        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
+                        dilated = cv2.dilate(bm255, kernel, iterations=2)
+                        cnts, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        out = base_img.copy()
+
+                        data = []
+                        for idx, cnt in enumerate(cnts):
+                            (cx, cy), radius = cv2.minEnclosingCircle(cnt)
+                            data.append({
+                                "id": idx + 1,
+                                "cx": int(cx), "cy": int(cy),
+                                "radius": radius,
+                                "display_radius": max(int(radius), 10),
+                            })
+
+                        top5 = [m["id"] for m in sorted(data, key=lambda x: x["radius"], reverse=True)[:5]]
+                        stats = []
+                        for m in data:
+                            color = (255, 0, 0) if m["id"] in top5 else (255, 255, 0)
+                            cv2.circle(out, (m["cx"], m["cy"]), m["display_radius"], color, 2)
+                            cv2.putText(out, str(m["id"]),
+                                        (m["cx"] + m["display_radius"], m["cy"] - m["display_radius"]),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
+                            stats.append((m["id"], round(m["radius"], 2)))
+
+                        return out, len(cnts), data, stats, top5
+
+                    # ============================================================ #
+                    #  Helper: build summary stats image for PDF report            #
+                    # ============================================================ #
+                    def _build_stats_image(title_text, num, ma_stats_list, top5_list):
+                        rows_needed = (num // 5) + 1
+                        bg_h = max(100, 60 + rows_needed * 30)
+                        img = Image.new("RGB", (900, bg_h), color=(255, 255, 255))
+                        d = ImageDraw.Draw(img)
+                        try:
+                            ft = ImageFont.truetype("arial.ttf", 22)
+                            ft2 = ImageFont.truetype("arial.ttf", 16)
+                        except Exception:
+                            ft = ImageFont.load_default()
+                            ft2 = ImageFont.load_default()
+                        d.text((20, 15), title_text, fill=(30, 80, 150), font=ft)
+                        xo, yo = 55, 55
+                        for mid, rad in ma_stats_list:
+                            tc = (255, 0, 0) if mid in top5_list else (50, 50, 50)
+                            d.text((xo, yo), f"MA #{mid}: {rad}px", fill=tc, font=ft2)
+                            xo += 160
+                            if xo > 800:
+                                xo = 55
+                                yo += 30
+                        return np.array(img)
+
+                    # ============================================================ #
+                    #  COMPARISON SUMMARY (shown first)                            #
+                    # ============================================================ #
+                    reduction_pct = (100.0 * removed_count / max(adv_count, 1))
+                    st.markdown("#### 📊 MA Detection Comparison")
+                    cmp_cols = st.columns(3)
+                    cmp_cols[0].metric("🔬 Advanced (All Candidates)", f"{adv_count} MA(s)")
+                    cmp_cols[1].metric("🎯 Basic (FP-Reduced)", f"{basic_count} MA(s)")
+                    cmp_cols[2].metric("🗑️ False Positives Removed", f"{removed_count}", delta=f"−{reduction_pct:.1f}%", delta_color="normal")
+
+                    # --- Shared probability map row ---
+                    st.markdown("##### Probability Map")
+                    col_pm1, col_pm2 = st.columns(2)
+                    with col_pm1:
                         st.image(disp, caption="Probability map (0–255)", use_container_width=True)
-                    with col_b:
-                        st.image(overlay, caption="Green overlay", use_container_width=True)
-                    st.image(circled, caption=f"MA clusters — {len(contours)} cluster(s) found (Top 5 largest highlighted in Red)", use_container_width=True)
+                    with col_pm2:
+                        overlay_adv = overlay_mask_on_rgb(image_cv2, baseline_mask > 0)
+                        st.image(overlay_adv, caption="Green overlay (Advanced — all candidates)", use_container_width=True)
 
-                    # --- Build a dynamic summary image explicitly for the PDF report ---
-                    num_mas = len(contours)
-                    rows_needed = (num_mas // 5) + 1  # 5 columns of text
-                    bg_height = max(100, 60 + rows_needed * 30)
-                    
-                    stats_img = Image.new("RGB", (900, bg_height), color=(255, 255, 255))
-                    d = ImageDraw.Draw(stats_img)
+                    # ============================================================ #
+                    #  ADVANCED MODE (all MA candidates)                            #
+                    # ============================================================ #
+                    st.markdown("---")
+                    st.markdown("#### 🔬 Advanced Mode — All MA Candidates (Higher Sensitivity)")
+                    st.caption("Shows every candidate detected by the model, including potential false positives.")
+
+                    circled_adv, n_adv, _, stats_adv, top5_adv = _build_circled_image(image_cv2, baseline_mask)
+                    st.image(circled_adv,
+                             caption=f"Advanced — {n_adv} MA cluster(s) detected (Top 5 largest in Red)",
+                             use_container_width=True)
+
+                    # ============================================================ #
+                    #  BASIC MODE (FP-reduced)                                     #
+                    # ============================================================ #
+                    st.markdown("---")
+                    st.markdown("#### 🎯 Basic Mode — Refined MA Candidates (Fewer False Positives)")
+                    st.caption("False positives removed using area, circularity, and confidence filters.")
+
+                    circled_basic, n_basic, _, stats_basic, top5_basic = _build_circled_image(image_cv2, refined_mask)
+
+                    # Also draw markers for removed FP locations
+                    removed_vis = image_cv2.copy()
+                    for (rx, ry) in removed_locs:
+                        cv2.circle(removed_vis, (rx, ry), 12, (255, 0, 0), 2)
+                        cv2.putText(removed_vis, "FP", (rx + 10, ry - 5),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+
+                    col_b1, col_b2 = st.columns(2)
+                    with col_b1:
+                        st.image(circled_basic,
+                                 caption=f"Basic — {n_basic} MA cluster(s) kept (Top 5 largest in Red)",
+                                 use_container_width=True)
+                    with col_b2:
+                        st.image(removed_vis,
+                                 caption=f"Removed false positives — {removed_count} candidate(s) filtered out",
+                                 use_container_width=True)
+
+                    # --- Build summary images for the PDF report ---
+                    stats_img_adv = _build_stats_image(
+                        f"Advanced Mode — {n_adv} MAs Detected (Top 5 in Red)", n_adv, stats_adv, top5_adv)
+                    stats_img_basic = _build_stats_image(
+                        f"Basic Mode — {n_basic} MAs Kept (Top 5 in Red)", n_basic, stats_basic, top5_basic)
+
+                    # --- Build comparison summary image for report ---
+                    cmp_img = Image.new("RGB", (900, 120), color=(255, 255, 255))
+                    d_cmp = ImageDraw.Draw(cmp_img)
                     try:
-                        font_title = ImageFont.truetype("arial.ttf", 22)
-                        font_text = ImageFont.truetype("arial.ttf", 16)
+                        f_t = ImageFont.truetype("arial.ttf", 22)
+                        f_b = ImageFont.truetype("arial.ttf", 18)
                     except Exception:
-                        font_title = ImageFont.load_default()
-                        font_text = ImageFont.load_default()
-                    
-                    d.text((20, 15), f"Total Microaneurysms (MAs) Detected: {num_mas} (Top 5 largest in Red)", fill=(30, 80, 150), font=font_title)
-                    
-                    # Print the list of radii, wrapping to a new line every 5 entries
-                    x_offset, y_offset = 55, 55
-                    for ma_id, rad in ma_stats:
-                        # Highlight the top 5 in red text on the PDF report, others in dark gray
-                        report_text_color = (255, 0, 0) if ma_id in top_5_ids else (50, 50, 50)
-                        
-                        d.text((x_offset, y_offset), f"MA #{ma_id}: {rad}px", fill=report_text_color, font=font_text)
-                        
-                        x_offset += 160
-                        if x_offset > 800:
-                            x_offset = 55
-                            y_offset += 30
-                    # -------------------------------------------------------------------
+                        f_t = ImageFont.load_default()
+                        f_b = ImageFont.load_default()
+                    d_cmp.text((20, 15), "MA Detection Comparison", fill=(30, 80, 150), font=f_t)
+                    d_cmp.text((40, 55), f"Advanced (All): {n_adv} MA(s)", fill=(50, 50, 50), font=f_b)
+                    d_cmp.text((340, 55), f"Basic (Refined): {n_basic} MA(s)", fill=(0, 128, 0), font=f_b)
+                    d_cmp.text((640, 55), f"Removed: {removed_count} ({reduction_pct:.1f}%)", fill=(200, 0, 0), font=f_b)
 
                     all_outputs.extend([
                         ("MA — Probability Map", disp),
-                        ("MA — Overlay", overlay),
-                        (f"MA — Clusters ({len(contours)} detected)", circled),
-                        ("MA — Detection Summary", np.array(stats_img)),
+                        ("MA — Advanced Mode — Overlay (All Candidates)", overlay_adv),
+                        (f"MA — Advanced Mode — Clusters ({n_adv} detected)", circled_adv),
+                        ("MA — Advanced Mode — Detection Summary", stats_img_adv),
+                        (f"MA — Basic Mode — Clusters ({n_basic} kept, {removed_count} removed)", circled_basic),
+                        (f"MA — Basic Mode — Removed False Positives ({removed_count})", removed_vis),
+                        ("MA — Basic Mode — Detection Summary", stats_img_basic),
+                        ("MA — Comparison Summary", np.array(cmp_img)),
                     ])
                 except Exception as e:
                     st.error(f"MA inference failed: {e}")

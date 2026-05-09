@@ -17,6 +17,7 @@ opencv-python
 numpy
 scipy
 scikit-learn
+scikit-image
 albumentations
 
 # ── Report generation ─────────────────────────────────────────────────────
