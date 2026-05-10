@@ -171,6 +171,11 @@ FOLLOW_UP = {
     4: "Immediate ophthalmology referral. Possible laser/surgical intervention.",
 }
 
+RFNLD_DESCRIPTIONS = {
+    True:  "RNFL defects detected. Wedge-shaped or diffuse thinning of the retinal nerve fibre layer observed around the optic disc. This finding is highly suggestive of glaucomatous damage and warrants urgent optic nerve evaluation including OCT-RNFL, visual field testing, and IOP measurement.",
+    False: "No significant RNFL defects detected in the peripapillary region. The retinal nerve fibre layer appears intact. However, clinical correlation with OCT and visual fields is recommended for comprehensive glaucoma assessment.",
+}
+
 
 def _cdr_interpretation(vcdr: float) -> str:
     if vcdr < 0.5:
@@ -327,7 +332,7 @@ def _build_story(phase, patient, doctor_name, results, original_image,
         [_t(lang, "patient_gender"), patient.get("gender", "—"),
          _t(lang, "eye_examined"),   patient.get("eye", "—")],
         [_t(lang, "report_id"),    report_id,
-         "Institution",            "IIT Bhubaneswar — Eye AI Lab"],
+         "Institution",            "IIT Bhubaneswar — IVP Lab"],
     ], s, font))
     story.append(Spacer(1, 4 * mm))
     story.append(_hr(thin=True))
@@ -561,7 +566,62 @@ def _build_story(phase, patient, doctor_name, results, original_image,
             ("Post-Processing",           "Heuristic FP filter (area ≥ 8 px, circularity ≥ 0.45, confidence ≥ 0.25)"),
         ], s, font))
 
-    # ── SECTION 6 — CLINICAL SUMMARY ──────────────────────────────────────── #
+    # ── SECTION 6 — RFNLD DETECTION (Phase 2 only) ────────────────────────── #
+    if phase == 2:
+        rfnld          = results.get("rfnld", {})
+        rfnld_img      = rfnld.get("image")
+        rfnld_found    = rfnld.get("defects_found", False)
+        rfnld_count    = rfnld.get("defect_count", 0)
+        rfnld_error    = rfnld.get("error", "")
+
+        story += _section_header("RFNLD Detection (Retinal Nerve Fibre Layer Defect)", s)
+
+        if rfnld_error:
+            story.append(Paragraph(
+                f"<b>⚠ RFNLD analysis could not be completed:</b> {rfnld_error}",
+                s["warn"]
+            ))
+        else:
+            # Status banner
+            if rfnld_found:
+                story.append(Paragraph(
+                    f'<b>RFNLD Status:</b>  <font color="#cc2200">DEFECTS DETECTED</font>  '
+                    f'— {rfnld_count} defect cluster(s) identified',
+                    ParagraphStyle("rfnld_status", fontName=ef, fontSize=10, spaceAfter=3 * mm)
+                ))
+            else:
+                story.append(Paragraph(
+                    '<b>RFNLD Status:</b>  <font color="#1a7a1a">NO DEFECTS DETECTED</font>',
+                    ParagraphStyle("rfnld_status", fontName=ef, fontSize=10, spaceAfter=3 * mm)
+                ))
+
+            # RFNLD annotated image (side by side with original)
+            if rfnld_img is not None:
+                story.append(_side_by_side(
+                    original_image, "Original fundus image",
+                    rfnld_img,      f"RFNLD analysis — {rfnld_count} defect(s) (blue lines)",
+                    s, max_half_mm=87,
+                ))
+
+            # Clinical interpretation
+            rfnld_desc = RFNLD_DESCRIPTIONS.get(rfnld_found, "")
+            if rfnld_desc:
+                story.append(Paragraph(f"<b>Clinical Interpretation:</b> {rfnld_desc}", s["body"]))
+
+            # Metrics table
+            story.append(Spacer(1, 2 * mm))
+            story.append(_metric_table([
+                ("RFNLD Defects Found",   "Yes" if rfnld_found else "No"),
+                ("Defect Cluster Count",  str(rfnld_count)),
+                ("Analysis Region",       "Peripapillary annular zone (1× to 3× disc radius)"),
+                ("Detection Method",      "RetiNet CNN (patch-based, pixel-wise classification + hierarchical clustering)"),
+                ("Model",                 "retinet_9010.h5 (90-10 split, binary RNFL classifier)"),
+                ("Clinical Relevance",    "RNFL defects are an early structural sign of glaucoma, "
+                                          "often preceding visual field loss by years."),
+            ], s, font))
+
+
+    # ── SECTION 7 — CLINICAL SUMMARY ──────────────────────────────────────── #
     story.append(PageBreak())
     story += _section_header(_t(lang, "clinical_summary"), s)
 
@@ -586,6 +646,14 @@ def _build_story(phase, patient, doctor_name, results, original_image,
     if phase == 2:
         summary_rows.append(("MA — Advanced Count", f"{ma_adv_val} cluster(s)"))
         summary_rows.append(("MA — Basic Count (FP-Reduced)", f"{ma_basic_val} cluster(s)"))
+        _rfnld = results.get("rfnld", {})
+        rfnld_summary_found = _rfnld.get("defects_found", False)
+        rfnld_summary_count = _rfnld.get("defect_count", 0)
+        if _rfnld.get("error"):
+            summary_rows.append(("RFNLD", f"Error: {_rfnld['error']}"))
+        else:
+            rfnld_label = f"{'DETECTED' if rfnld_summary_found else 'None'} — {rfnld_summary_count} defect(s)"
+            summary_rows.append(("RFNLD (Nerve Fibre Layer)", rfnld_label))
     story.append(_metric_table(summary_rows, s, font))
 
     story += _section_header(_t(lang, "recommendations"), s)
@@ -608,6 +676,15 @@ def _build_story(phase, patient, doctor_name, results, original_image,
             f"Ophthalmology referral within 3 months.",
             s["warn"]
         ))
+    # RFNLD recommendation
+    if phase == 2:
+        _rfnld_rec = results.get("rfnld", {})
+        if _rfnld_rec.get("defects_found", False):
+            story.append(Paragraph(
+                f"• RNFL defects detected ({_rfnld_rec.get('defect_count', 0)} cluster(s)) — "
+                f"urgent glaucoma evaluation with OCT-RNFL and visual field testing recommended.",
+                s["warn"]
+            ))
 
     # ── Footer ─────────────────────────────────────────────────────────────── #
     story.append(Spacer(1, 6 * mm))

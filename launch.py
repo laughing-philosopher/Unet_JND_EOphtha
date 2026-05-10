@@ -33,7 +33,7 @@ def main():
 
     print("=" * 55)
     print("  AAKHI — Retinal Image Analysis")
-    print("  IIT Bhubaneswar · Eye AI Lab")
+    print("  IIT Bhubaneswar · IVP Lab")
     print("=" * 55)
     print(f"\n  Starting on {url}")
     print("  Press Ctrl+C to stop.\n")

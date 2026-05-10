@@ -29,6 +29,7 @@ function aakhi() {
     phase2Ready: false,
     statusMsg: "Starting...",
     maProgressPct: 0,
+    rfnldReady: false,
 
     results: null,
     reportLoading: false,
@@ -40,6 +41,7 @@ function aakhi() {
       { key: "lesion",   label: "Lesion Detection",       done: false, running: false },
       { key: "glaucoma", label: "Glaucoma Grading",       done: false, running: false },
       { key: "ma",       label: "Microaneurysm Detection",done: false, running: false },
+      { key: "rfnld",    label: "RFNLD Detection",        done: false, running: false },
     ],
 
     tabs: [
@@ -48,6 +50,7 @@ function aakhi() {
       { key: "lesion",   label: "Lesions" },
       { key: "glaucoma", label: "Glaucoma" },
       { key: "ma",       label: "MA Detection" },
+      { key: "rfnld",    label: "RFNLD" },
     ],
 
     // ── Init ────────────────────────────────────────────────────────────── //
@@ -83,6 +86,7 @@ function aakhi() {
         lesion:   this.t("lesion",       "Lesions"),
         glaucoma: this.t("glaucoma",     "Glaucoma"),
         ma:       this.t("ma",           "MA Detection"),
+        rfnld:    this.t("rfnld",        "RFNLD"),
       };
       this.tabs = this.tabs.map(t => ({ ...t, label: map[t.key] || t.label }));
       this.steps = this.steps.map(s => ({
@@ -109,6 +113,7 @@ function aakhi() {
       this.analyzing     = false;
       this.phase1Ready   = false;
       this.phase2Ready   = false;
+      this.rfnldReady    = false;
       this.maProgressPct = 0;
       this.results       = null;
       this.steps.forEach(s => { s.done = false; s.running = false; });
@@ -162,11 +167,11 @@ function aakhi() {
       es.onmessage = (e) => {
         const evt = JSON.parse(e.data);
         this.handleSSEEvent(evt);
-        if (["phase2_ready", "ma_error", "complete", "error"].includes(evt.type)) {
+        if (["rfnld_ready", "rfnld_error", "complete", "error"].includes(evt.type)) {
           es.close();
           this.fetchResults();
         }
-        if (evt.type === "phase1_ready") {
+        if (evt.type === "phase1_ready" || evt.type === "phase2_ready") {
           this.fetchResults();
         }
       };
@@ -175,7 +180,7 @@ function aakhi() {
         // Fall back to polling
         const poll = setInterval(async () => {
           await this.fetchResults();
-          if (this.phase2Ready) clearInterval(poll);
+          if (this.rfnldReady) clearInterval(poll);
         }, 2000);
       };
     },
@@ -203,9 +208,21 @@ function aakhi() {
           this.phase2Ready = true;
           this.markStepDone("ma");
           this.maProgressPct = 100;
+          this.markStepRunning("rfnld");
+          break;
+        case "rfnld_started":
+          this.markStepRunning("rfnld");
+          break;
+        case "rfnld_ready":
+          this.rfnldReady = true;
+          this.markStepDone("rfnld");
+          break;
+        case "rfnld_error":
+          this.rfnldReady = true;
+          this.markStepDone("rfnld");
           break;
         case "ma_error":
-          this.markStepDone("ma");  // mark done even on error
+          this.markStepDone("ma");
           break;
       }
     },
@@ -236,6 +253,9 @@ function aakhi() {
         if (data.results?.glaucoma?.grade) this.markStepDone("glaucoma");
         if (data.phase2_ready)             this.markStepDone("ma");
         else if (data.phase1_ready)        this.markStepRunning("ma");
+        if (data.rfnld_ready)              this.markStepDone("rfnld");
+        else if (data.phase2_ready)        this.markStepRunning("rfnld");
+        this.rfnldReady = data.rfnld_ready || this.rfnldReady;
       } catch (e) {
         console.warn("fetchResults error", e);
       }

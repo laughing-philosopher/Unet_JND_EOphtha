@@ -163,6 +163,13 @@
             <template x-if="step.key === 'ma' && step.done">
               <span class="ml-auto text-xs text-emerald-600" x-text="(results?.results?.ma?.count || 0) + ' clusters'"></span>
             </template>
+            <template x-if="step.key === 'rfnld' && step.done">
+              <span class="ml-auto text-xs"
+                    :class="results?.results?.rfnld?.defects_found ? 'text-red-600' : 'text-emerald-600'"
+                    x-text="results?.results?.rfnld?.defects_found
+                            ? (results?.results?.rfnld?.defect_count || 0) + ' defect(s)'
+                            : 'No defects'"></span>
+            </template>
           </div>
         </template>
       </div>
@@ -440,6 +447,81 @@
               <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Detected Clusters</div>
               <img :src="'data:image/png;base64,' + results?.results?.ma?.image_b64"
                    class="rounded-xl w-full object-contain max-h-64" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── RFNLD Detection ───────────────────────────────────────────────────── -->
+      <div x-show="activeTab === 'rfnld'" class="p-6">
+        <h3 class="text-base font-medium text-slate-700 mb-1">RFNLD Detection</h3>
+        <p class="text-xs text-slate-400 mb-4">Retinal Nerve Fibre Layer Defect — peripapillary RNFL analysis</p>
+
+        <!-- Pending / Running state -->
+        <div x-show="!results?.rfnld_ready && !results?.results?.rfnld?.image_b64" class="text-center py-8">
+          <div class="w-10 h-10 border-4 border-slate-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-3"></div>
+          <p class="text-sm text-slate-400">RFNLD analysis in progress…</p>
+        </div>
+
+        <!-- Error state -->
+        <template x-if="results?.results?.rfnld?.error">
+          <div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4">
+            <span class="font-semibold">⚠ RFNLD Error:</span>
+            <span x-text="results.results.rfnld.error"></span>
+          </div>
+        </template>
+
+        <!-- Results -->
+        <div x-show="results?.rfnld_ready || results?.results?.rfnld?.image_b64">
+          <!-- Status banner -->
+          <div class="mb-4 flex items-center gap-3">
+            <div class="text-3xl font-light"
+                 :class="results?.results?.rfnld?.defects_found ? 'text-red-500' : 'text-emerald-500'"
+                 x-text="results?.results?.rfnld?.defects_found
+                         ? (results?.results?.rfnld?.defect_count || 0) + ' Defect(s)'
+                         : 'No Defects'"></div>
+            <div class="text-sm text-slate-500">RNFL Layer Status</div>
+          </div>
+
+          <!-- Interpretation -->
+          <div class="mb-4 text-xs px-3 py-2 rounded-lg"
+               :class="results?.results?.rfnld?.defects_found
+                        ? 'bg-red-50 text-red-700'
+                        : 'bg-emerald-50 text-emerald-700'"
+               x-text="results?.results?.rfnld?.defects_found
+                       ? 'RNFL defects detected — suggestive of glaucomatous damage. Urgent optic nerve evaluation recommended.'
+                       : 'No significant RNFL defects. Clinical correlation with OCT and visual fields recommended.'"></div>
+
+          <!-- Images -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Original Image</div>
+              <img :src="'data:image/png;base64,' + results?.original_b64"
+                   class="rounded-xl w-full object-contain max-h-64" />
+            </div>
+            <div>
+              <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">RFNLD Analysis</div>
+              <img :src="'data:image/png;base64,' + results?.results?.rfnld?.image_b64"
+                   class="rounded-xl w-full object-contain max-h-64" />
+            </div>
+          </div>
+
+          <!-- Metrics -->
+          <div class="mt-4 grid grid-cols-3 gap-3">
+            <div class="bg-slate-50 rounded-xl p-3 text-center">
+              <div class="text-xs text-slate-400 mb-1">Defects Found</div>
+              <div class="text-lg font-medium"
+                   :class="results?.results?.rfnld?.defects_found ? 'text-red-600' : 'text-emerald-600'"
+                   x-text="results?.results?.rfnld?.defects_found ? 'Yes' : 'No'"></div>
+            </div>
+            <div class="bg-slate-50 rounded-xl p-3 text-center">
+              <div class="text-xs text-slate-400 mb-1">Defect Clusters</div>
+              <div class="text-lg font-medium text-slate-700"
+                   x-text="results?.results?.rfnld?.defect_count || 0"></div>
+            </div>
+            <div class="bg-slate-50 rounded-xl p-3 text-center">
+              <div class="text-xs text-slate-400 mb-1">Model</div>
+              <div class="text-sm font-medium text-slate-600">RetiNet CNN</div>
             </div>
           </div>
         </div>
