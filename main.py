@@ -238,22 +238,27 @@ def _run_phase1(job_id: str, img_rgb: np.ndarray) -> None:
     # ── OD/OC Segmentation ────────────────────────────────────────────────── #
     try:
         _update("Running OD/OC Segmentation...")
-        odoc_fiam_path  = _path("models", "UNet+FIAM_1.2_0back_newformula.h5")
-        odoc_basic_path = _path("models", "odoc_model.h5")
+        from processing.processing_odoc import processing as odoc_proc
 
-        if os.path.exists(odoc_fiam_path):
-            # Best model: UNet + FIAM (green=disc, blue=cup colour-coded)
-            from processing.processing_odoc2 import processing as odoc_proc
-            raw_odoc = np.array(odoc_proc(img_rgb, threshold=0.5, batch_size=4), dtype=np.uint8)
-        elif os.path.exists(odoc_basic_path):
-            # Fallback: legacy Theano-trained disc model + cup estimation
-            from processing.processing_odoc_basic import processing as odoc_basic
-            raw_odoc = np.array(odoc_basic(img_rgb, threshold=0.5), dtype=np.uint8)
-        else:
-            raise FileNotFoundError("No ODOC model file found in models/")
+        # processing_odoc returns (outlined_img, features_dict, rf_label, rf_prob, seg_mask)
+        outlined_img, odoc_features, rf_pred_label, rf_prob, full_pred = odoc_proc(img_rgb, threshold=0.5, batch_size=8)
+
+        # Build colour-coded ODOC image for overlay_odoc.py
+        #   Green [0,255,0] = disc rim area, Blue [0,0,255] = cup
+        orig_h, orig_w = img_rgb.shape[:2]
+        raw_odoc = np.zeros((orig_h, orig_w, 3), dtype=np.uint8)
+        raw_odoc[full_pred == 1] = [0, 255, 0]   # Green = disc rim
+        raw_odoc[full_pred == 2] = [0, 0, 255]    # Blue  = cup
 
         from processing.overlay_odoc import create_odoc_overlay
         overlay, meas = create_odoc_overlay(img_rgb, raw_odoc, alpha=0.38)
+
+        # Store RF glaucoma prediction for later use
+        results["odoc_rf"] = {
+            "features":  odoc_features,
+            "rf_pred":   rf_pred_label,
+            "rf_prob":   rf_prob,
+        }
         results["odoc"] = {
             "overlay_b64":  _np_to_b64(overlay),
             "raw_b64":      _np_to_b64(raw_odoc),
@@ -296,17 +301,30 @@ def _run_phase1(job_id: str, img_rgb: np.ndarray) -> None:
 
     q.put({"type": "progress", "step": "lesion", "done": True})
 
-    # ── Glaucoma Grading (with CDR refinement from ODOC) ──────────────────── #
+    # ── Glaucoma Grading (RF Model-based) ─────────────────────────────────── #
     try:
         _update("Running Glaucoma Grading...")
-        from processing.processing_glaucoma_grading import predict_glaucoma_severity
-        tmp      = _save_temp_image(img_rgb)
-        raw_grade= predict_glaucoma_severity(tmp, _get_glaucoma_model())
-        os.unlink(tmp)
+        
+        # Use RF model output generated during OD/OC step
+        rf_pred = results.get("odoc_rf", {}).get("rf_pred", "Unknown")
+        rf_prob = results.get("odoc_rf", {}).get("rf_prob", 0.0)
+        
+        if rf_pred == "Glaucoma":
+            if rf_prob >= 0.7:
+                gl_grade = "Advanced Glaucoma"
+            elif rf_prob >= 0.5:
+                gl_grade = "Moderate Glaucoma"
+            else:
+                gl_grade = "Glaucoma Suspect"
+            cdr_reason = f"Random Forest detected Glaucoma (Probability: {rf_prob:.1%})"
+        elif rf_pred == "Normal":
+            gl_grade = "No Glaucoma"
+            cdr_reason = f"Random Forest predicts Normal (Probability: {(1-rf_prob):.1%})"
+        else:
+            gl_grade = "Error"
+            cdr_reason = "RF Model failed or OD/OC extraction failed."
 
-        # Refine grade using CDR measurements from ODOC
-        meas = results.get("odoc", {}).get("measurements", {})
-        gl_grade, cdr_reason = _cdr_refined_glaucoma(raw_grade, meas)
+        raw_grade = f"RF: {rf_pred} (Prob: {rf_prob:.2f})"
 
         gl_levels = {
             "No Glaucoma": 0, "Glaucoma Suspect": 1,
@@ -422,7 +440,59 @@ def _run_ma(job_id: str, img_rgb: np.ndarray) -> None:
     except Exception as e:
         traceback.print_exc()
         jobs[job_id]["results"]["ma"] = {"error": str(e), "count": 0, "adv_count": 0, "basic_count": 0}
-        q.put({"type": "ma_error", "msg": str(e)})
+        jobs[job_id]["phase2_ready"] = True  # MA failed but don't block phase2
+        q.put({"type": "phase2_ready", "ma_count": 0, "ma_basic_count": 0})
+
+
+def _run_rfnld(job_id: str, img_rgb: np.ndarray) -> None:
+    """Run RFNLD detection asynchronously after MA; uses ODOC coordinates."""
+    job = jobs[job_id]
+    q: Queue = job["sse_queue"]
+
+    try:
+        from processing.processing_rfnld import processing as rfnld_proc
+        from processing.processing_rfnld import derive_coordinates_from_odoc
+
+        rfnld_model_path = _path("models", "retinet_9010.h5")
+        if not os.path.exists(rfnld_model_path):
+            raise FileNotFoundError(f"RFNLD model not found: {rfnld_model_path}")
+
+        # Derive optic disc coordinates from ODOC segmentation
+        odoc_meas = job["results"].get("odoc", {}).get("measurements", {})
+        coords, coords2 = derive_coordinates_from_odoc(odoc_meas)
+
+        if coords is None or coords2 is None:
+            raise ValueError(
+                "Could not derive optic disc coordinates from ODOC results. "
+                "ODOC segmentation may have failed to detect the disc."
+            )
+
+        q.put({"type": "rfnld_started"})
+        job["status_msg"] = "Running RFNLD Detection..."
+        q.put({"type": "status", "msg": "Running RFNLD Detection..."})
+
+        result = rfnld_proc(img_rgb, coords, coords2)
+
+        rfnld_img    = result["image"]
+        defects_found = result["defects_found"]
+        defect_count  = result["defect_count"]
+
+        jobs[job_id]["results"]["rfnld"] = {
+            "image_b64":     _np_to_b64(rfnld_img),
+            "image_arr":     rfnld_img,
+            "defects_found": defects_found,
+            "defect_count":  defect_count,
+        }
+        jobs[job_id]["rfnld_ready"] = True
+        q.put({"type": "rfnld_ready", "defect_count": defect_count, "defects_found": defects_found})
+
+    except Exception as e:
+        traceback.print_exc()
+        jobs[job_id]["results"]["rfnld"] = {
+            "error": str(e), "defects_found": False, "defect_count": 0,
+        }
+        jobs[job_id]["rfnld_ready"] = True  # mark ready even on error
+        q.put({"type": "rfnld_error", "msg": str(e)})
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────── #
@@ -527,19 +597,21 @@ def api_analyze():
         "results":       {},
         "phase1_ready":  False,
         "phase2_ready":  False,
+        "rfnld_ready":   False,
         "ma_progress":   0,
         "ma_total":      1,
         "sse_queue":     Queue(),
         "user":          _current_user(),
     }
 
-    # Phase 1 runs in a thread (blocking within that thread, fast models)
-    def _phase1_then_ma():
+    # Phase 1 runs in a thread, then MA, then RFNLD
+    def _phase1_then_phase2():
         _run_phase1(job_id, img_rgb)
         _run_ma(job_id, img_rgb)
+        _run_rfnld(job_id, img_rgb)
         jobs[job_id]["status"] = "complete"
 
-    threading.Thread(target=_phase1_then_ma, daemon=True).start()
+    threading.Thread(target=_phase1_then_phase2, daemon=True).start()
 
     return jsonify({"job_id": job_id})
 
@@ -557,15 +629,16 @@ def api_stream(job_id: str):
             try:
                 event = q.get(timeout=30)
                 yield _sse_event(event)
-                if event.get("type") in ("phase2_ready", "ma_error",
+                if event.get("type") in ("rfnld_ready", "rfnld_error",
                                           "complete", "error"):
                     break
-                if event.get("type") == "phase1_ready":
-                    # Keep streaming for MA progress
+                if event.get("type") in ("phase1_ready", "phase2_ready",
+                                          "ma_error"):
+                    # Keep streaming for MA + RFNLD progress
                     pass
             except Exception:
                 yield _sse_event({"type": "heartbeat"})
-                if jobs[job_id].get("phase2_ready") or jobs[job_id]["status"] == "complete":
+                if jobs[job_id].get("rfnld_ready") or jobs[job_id]["status"] == "complete":
                     break
 
     return Response(_generate(),
@@ -627,7 +700,16 @@ def api_results(job_id: str):
                 "error":            res.get("ma", {}).get("error", ""),
                 "progress_pct":     int(job["ma_progress"] / max(job["ma_total"], 1) * 100),
             },
+            "rfnld": {
+                "status":        "complete" if job.get("rfnld_ready") else
+                                 ("running" if job["phase2_ready"] else "pending"),
+                "image_b64":     res.get("rfnld", {}).get("image_b64", ""),
+                "defects_found": res.get("rfnld", {}).get("defects_found", False),
+                "defect_count":  res.get("rfnld", {}).get("defect_count", 0),
+                "error":         res.get("rfnld", {}).get("error", ""),
+            },
         },
+        "rfnld_ready":   job.get("rfnld_ready", False),
     }
     return jsonify(payload)
 
@@ -682,6 +764,11 @@ def api_report(job_id: str, phase: int):
                 "basic_image":      res.get("ma", {}).get("basic_image_arr"),
                 "removed_image":    res.get("ma", {}).get("removed_image_arr"),
             } if phase == 2 else {},
+            "rfnld":    {
+                "image":         res.get("rfnld", {}).get("image_arr"),
+                "defects_found": res.get("rfnld", {}).get("defects_found", False),
+                "defect_count":  res.get("rfnld", {}).get("defect_count", 0),
+            } if phase == 2 else {},
         },
         original_image = job["image_arr"],
         lang           = lang,
@@ -703,7 +790,7 @@ def api_report(job_id: str, phase: int):
 
 @app.route("/api/i18n/<lang>")
 def api_i18n(lang: str):
-    allowed = {"en", "hi", "or", "bn"}
+    allowed = {"en", "hi", "mr", "or", "bn", "te", "ta", "gu", "sat"}
     if lang not in allowed:
         lang = "en"
     fpath = _path("static", "i18n", f"{lang}.json")

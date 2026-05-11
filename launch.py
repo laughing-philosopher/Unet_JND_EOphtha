@@ -33,14 +33,21 @@ def main():
 
     print("=" * 55)
     print("  AAKHI — Retinal Image Analysis")
-    print("  IIT Bhubaneswar · Eye AI Lab")
+    print("  IIT Bhubaneswar · IVP Lab")
     print("=" * 55)
     print(f"\n  Starting on {url}")
     print("  Press Ctrl+C to stop.\n")
 
-    # Open browser after a short delay
+    # Open browser once the server actually responds (poll up to 120 s)
     def _open_browser():
-        time.sleep(2.5)
+        import urllib.request
+        for _ in range(120):
+            time.sleep(1)
+            try:
+                urllib.request.urlopen(url + "/login", timeout=1)
+                break
+            except Exception:
+                continue
         webbrowser.open(url)
 
     threading.Thread(target=_open_browser, daemon=True).start()

@@ -9,11 +9,23 @@ auth.py — Local authentication module for OphthApp.
 import json
 import os
 import hashlib
-import streamlit as st
 import sys
 
-from helper import get_base64_image, get_path
-from translations import get_text  # Added import for translations
+# Streamlit and related helpers are only available in the legacy Streamlit app.
+# The Flask app only uses verify_user / get_user / register_user, which don't
+# need any of these — guard them so the exe doesn't crash on import.
+try:
+    import streamlit as st
+    _ST_AVAILABLE = True
+except ImportError:
+    st = None
+    _ST_AVAILABLE = False
+
+try:
+    from helper import get_base64_image, get_path
+    from translations import get_text
+except ImportError:
+    get_base64_image = get_path = get_text = None
 
 
 def _get_users_file() -> str:
@@ -39,7 +51,9 @@ USERS_FILE = _get_users_file()
 # ---------------------------------------------------------------------------
 
 def t(key):
-    """Global translation helper for auth."""
+    """Global translation helper for auth (Streamlit only)."""
+    if not _ST_AVAILABLE or get_text is None:
+        return key
     return get_text(st.session_state.get("lang_code", "en"), key)
 
 

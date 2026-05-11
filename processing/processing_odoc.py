@@ -174,4 +174,4 @@ def processing(image_rgb, threshold=0.5, batch_size=8):
     contours_oc, _ = cv2.findContours(mask_oc, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cv2.drawContours(output_img, contours_oc, -1, (255, 0, 0), 3)
 
-    return output_img, features, rf_pred_label, rf_prob
+    return output_img, features, rf_pred_label, rf_prob, full_res_pred
