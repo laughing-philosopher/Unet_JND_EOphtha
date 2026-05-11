@@ -346,5 +346,61 @@ function aakhi() {
         [this.t("soft_exudates",  "Soft Exudates"),   a.soft_exudates  || 0, "#eab308"],
       ];
     },
+
+    glGradeColor(level) {
+      const colors = [
+        "text-emerald-600", "text-yellow-600",
+        "text-orange-600",  "text-red-600", "text-red-800"
+      ];
+      return colors[level ?? 0] || "text-slate-600";
+    },
+
+    overallSeverityColor() {
+      const drLevel = this.results?.results?.drg?.level || 0;
+      const glLevel = this.results?.results?.glaucoma?.level || 0;
+      let maxLevel = Math.max(drLevel, glLevel);
+      
+      if (this.phase2Ready) {
+        if ((this.results?.results?.ma?.count || 0) > 0) maxLevel = Math.max(maxLevel, 1);
+        if (this.results?.results?.rfnld?.defects_found) maxLevel = Math.max(maxLevel, 1);
+      }
+      
+      if (maxLevel >= 3) return "bg-red-50 text-red-800 border border-red-200";
+      if (maxLevel >= 2) return "bg-orange-50 text-orange-800 border border-orange-200";
+      if (maxLevel >= 1) return "bg-yellow-50 text-yellow-800 border border-yellow-200";
+      return "bg-emerald-50 text-emerald-800 border border-emerald-200";
+    },
+
+    overallNextSteps() {
+      const drLevel = this.results?.results?.drg?.level || 0;
+      const glLevel = this.results?.results?.glaucoma?.level || 0;
+      
+      let steps = [];
+      
+      if (drLevel >= 3) steps.push("🚨 <b>Diabetic Retinopathy:</b> Urgent Ophthalmology referral required for advanced DR.");
+      else if (drLevel >= 1) steps.push("⚠️ <b>Diabetic Retinopathy:</b> Regular monitoring and specialist consultation recommended.");
+      else steps.push("✅ <b>Diabetic Retinopathy:</b> No signs of DR.");
+
+      if (glLevel >= 3) steps.push("🚨 <b>Glaucoma:</b> Urgent specialist management required for Advanced Glaucoma.");
+      else if (glLevel >= 1) steps.push("⚠️ <b>Glaucoma:</b> Full glaucoma workup recommended (IOP, visual fields, OCT).");
+      else steps.push("✅ <b>Glaucoma:</b> No evidence of glaucomatous neuropathy.");
+      
+      if (this.phase2Ready) {
+        const maCount = this.results?.results?.ma?.count || 0;
+        const rfnld = this.results?.results?.rfnld?.defects_found || false;
+        
+        if (maCount > 0 && drLevel === 0) steps.push("🔍 <b>Microaneurysms:</b> Found in Phase 2. Re-evaluate for early DR.");
+        else if (maCount > 0) steps.push("🔍 <b>Microaneurysms:</b> Detected, consistent with DR findings.");
+        else steps.push("✅ <b>Microaneurysms:</b> None detected.");
+
+        if (rfnld && glLevel === 0) steps.push("🔍 <b>RFNLD:</b> Defects detected. Suggestive of early glaucomatous damage, clinical correlation needed.");
+        else if (rfnld) steps.push("🔍 <b>RFNLD:</b> Defects detected, consistent with glaucoma findings.");
+        else steps.push("✅ <b>RFNLD:</b> No significant defects.");
+      } else {
+        steps.push("⏳ <i>Awaiting Phase 2 analysis (MA & RFNLD) for further insights...</i>");
+      }
+      
+      return steps.join("<br>");
+    }
   };
 }

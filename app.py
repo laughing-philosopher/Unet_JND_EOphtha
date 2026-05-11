@@ -468,8 +468,8 @@ def main():
                     reduction_pct = (100.0 * removed_count / max(adv_count, 1))
                     st.markdown("#### 📊 MA Detection Comparison")
                     cmp_cols = st.columns(3)
-                    cmp_cols[0].metric("🔬 Advanced (All Candidates)", f"{adv_count} MA(s)")
-                    cmp_cols[1].metric("🎯 Basic (FP-Reduced)", f"{basic_count} MA(s)")
+                    cmp_cols[0].metric("🔬 Maximum (All Candidates)", f"{adv_count} MA(s)")
+                    cmp_cols[1].metric("🎯 Minimum (FP-Reduced)", f"{basic_count} MA(s)")
                     cmp_cols[2].metric("🗑️ False Positives Removed", f"{removed_count}", delta=f"−{reduction_pct:.1f}%", delta_color="normal")
 
                     # --- Shared probability map row ---
@@ -479,25 +479,25 @@ def main():
                         st.image(disp, caption="Probability map (0–255)", use_container_width=True)
                     with col_pm2:
                         overlay_adv = overlay_mask_on_rgb(image_cv2, baseline_mask > 0)
-                        st.image(overlay_adv, caption="Green overlay (Advanced — all candidates)", use_container_width=True)
+                        st.image(overlay_adv, caption="Green overlay (Maximum — all candidates)", use_container_width=True)
 
                     # ============================================================ #
-                    #  ADVANCED MODE (all MA candidates)                            #
+                    #  MAXIMUM MODE (all MA candidates)                            #
                     # ============================================================ #
                     st.markdown("---")
-                    st.markdown("#### 🔬 Advanced Mode — All MA Candidates (Higher Sensitivity)")
+                    st.markdown("#### 🔬 Maximum Mode — All MA Candidates (Higher Sensitivity)")
                     st.caption("Shows every candidate detected by the model, including potential false positives.")
 
                     circled_adv, n_adv, _, stats_adv, top5_adv = _build_circled_image(image_cv2, baseline_mask)
                     st.image(circled_adv,
-                             caption=f"Advanced — {n_adv} MA cluster(s) detected (Top 5 largest in Red)",
+                             caption=f"Maximum — {n_adv} MA cluster(s) detected (Top 5 largest in Red)",
                              use_container_width=True)
 
                     # ============================================================ #
-                    #  BASIC MODE (FP-reduced)                                     #
+                    #  MINIMUM MODE (FP-reduced)                                     #
                     # ============================================================ #
                     st.markdown("---")
-                    st.markdown("#### 🎯 Basic Mode — Refined MA Candidates (Fewer False Positives)")
+                    st.markdown("#### 🎯 Minimum Mode — Refined MA Candidates (Fewer False Positives)")
                     st.caption("False positives removed using area, circularity, and confidence filters.")
 
                     circled_basic, n_basic, _, stats_basic, top5_basic = _build_circled_image(image_cv2, refined_mask)
@@ -512,7 +512,7 @@ def main():
                     col_b1, col_b2 = st.columns(2)
                     with col_b1:
                         st.image(circled_basic,
-                                 caption=f"Basic — {n_basic} MA cluster(s) kept (Top 5 largest in Red)",
+                                 caption=f"Minimum — {n_basic} MA cluster(s) kept (Top 5 largest in Red)",
                                  use_container_width=True)
                     with col_b2:
                         st.image(removed_vis,
@@ -521,9 +521,9 @@ def main():
 
                     # --- Build summary images for the PDF report ---
                     stats_img_adv = _build_stats_image(
-                        f"Advanced Mode — {n_adv} MAs Detected (Top 5 in Red)", n_adv, stats_adv, top5_adv)
+                        f"Maximum Mode — {n_adv} MAs Detected (Top 5 in Red)", n_adv, stats_adv, top5_adv)
                     stats_img_basic = _build_stats_image(
-                        f"Basic Mode — {n_basic} MAs Kept (Top 5 in Red)", n_basic, stats_basic, top5_basic)
+                        f"Minimum Mode — {n_basic} MAs Kept (Top 5 in Red)", n_basic, stats_basic, top5_basic)
 
                     # --- Build comparison summary image for report ---
                     cmp_img = Image.new("RGB", (900, 120), color=(255, 255, 255))
@@ -535,18 +535,18 @@ def main():
                         f_t = ImageFont.load_default()
                         f_b = ImageFont.load_default()
                     d_cmp.text((20, 15), "MA Detection Comparison", fill=(30, 80, 150), font=f_t)
-                    d_cmp.text((40, 55), f"Advanced (All): {n_adv} MA(s)", fill=(50, 50, 50), font=f_b)
-                    d_cmp.text((340, 55), f"Basic (Refined): {n_basic} MA(s)", fill=(0, 128, 0), font=f_b)
+                    d_cmp.text((40, 55), f"Maximum (All): {n_adv} MA(s)", fill=(50, 50, 50), font=f_b)
+                    d_cmp.text((340, 55), f"Minimum (Refined): {n_basic} MA(s)", fill=(0, 128, 0), font=f_b)
                     d_cmp.text((640, 55), f"Removed: {removed_count} ({reduction_pct:.1f}%)", fill=(200, 0, 0), font=f_b)
 
                     all_outputs.extend([
                         ("MA — Probability Map", disp),
-                        ("MA — Advanced Mode — Overlay (All Candidates)", overlay_adv),
-                        (f"MA — Advanced Mode — Clusters ({n_adv} detected)", circled_adv),
-                        ("MA — Advanced Mode — Detection Summary", stats_img_adv),
-                        (f"MA — Basic Mode — Clusters ({n_basic} kept, {removed_count} removed)", circled_basic),
-                        (f"MA — Basic Mode — Removed False Positives ({removed_count})", removed_vis),
-                        ("MA — Basic Mode — Detection Summary", stats_img_basic),
+                        ("MA — Maximum Mode — Overlay (All Candidates)", overlay_adv),
+                        (f"MA — Maximum Mode — Clusters ({n_adv} detected)", circled_adv),
+                        ("MA — Maximum Mode — Detection Summary", stats_img_adv),
+                        (f"MA — Minimum Mode — Clusters ({n_basic} kept, {removed_count} removed)", circled_basic),
+                        (f"MA — Minimum Mode — Removed False Positives ({removed_count})", removed_vis),
+                        ("MA — Minimum Mode — Detection Summary", stats_img_basic),
                         ("MA — Comparison Summary", np.array(cmp_img)),
                     ])
                 except Exception as e:

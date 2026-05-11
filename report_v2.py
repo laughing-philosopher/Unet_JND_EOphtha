@@ -478,7 +478,7 @@ def _build_story(phase, patient, doctor_name, results, original_image,
                                  if not meas.get("isnt_normal", True) else "No"),
     ], s, font))
 
-    # ── SECTION 5 — MICROANEURYSM (Phase 2 only) — Advanced & Basic ────── #
+    # ── SECTION 5 — MICROANEURYSM (Phase 2 only) — Maximum & Minimum ───── #
     if phase == 2:
         ma             = results.get("ma", {})
         ma_orig        = ma.get("original_overlay")
@@ -505,62 +505,62 @@ def _build_story(phase, patient, doctor_name, results, original_image,
 
         # --- Comparison banner ---
         story.append(Paragraph(
-            f"<b>Advanced Mode (All Candidates):</b>  {ma_adv_count} cluster(s)  |  "
-            f"<b>Basic Mode (FP-Reduced):</b>  {ma_basic_count} cluster(s)  |  "
+            f"<b>Maximum Mode (All Candidates):</b>  {ma_adv_count} cluster(s)  |  "
+            f"<b>Minimum Mode (FP-Reduced):</b>  {ma_basic_count} cluster(s)  |  "
             f"<b>Removed:</b>  {ma_removed} ({ma_fp_pct:.1f}%)",
             ParagraphStyle("ma_cmp", fontName=ef, fontSize=10, spaceAfter=3 * mm)
         ))
 
-        # --- Advanced view ---
+        # --- Maximum view ---
         story.append(Paragraph(
-            "<b>🔬 Advanced Mode — All MA Candidates (Higher Sensitivity)</b>",
+            "<b>🔬 Maximum Mode — All MA Candidates (Higher Sensitivity)</b>",
             ParagraphStyle("ma_adv_hdr", fontName=ef, fontSize=10, spaceAfter=2 * mm)
         ))
 
         if ma_adv_img is not None and ma_orig is not None:
             story.append(_side_by_side(
                 ma_orig,   "Probability map (green overlay)",
-                ma_adv_img, f"Advanced — {ma_adv_count} MA cluster(s) detected",
+                ma_adv_img, f"Maximum — {ma_adv_count} MA cluster(s) detected",
                 s, max_half_mm=87,
             ))
         elif ma_adv_img is not None:
             story.append(_np_to_rl(ma_adv_img, max_w_mm=130, max_h_mm=150))
-            story.append(Paragraph(f"Advanced — {ma_adv_count} MA cluster(s) detected", s["img_label"]))
+            story.append(Paragraph(f"Maximum — {ma_adv_count} MA cluster(s) detected", s["img_label"]))
 
         ma_adv_risk = ("Low" if ma_adv_count == 0 else
                        "Moderate" if ma_adv_count <= 5 else
                        "High" if ma_adv_count <= 15 else "Very High")
         story.append(Spacer(1, 2 * mm))
         story.append(_metric_table([
-            ("Advanced MA Cluster Count", str(ma_adv_count)),
+            ("Maximum MA Cluster Count", str(ma_adv_count)),
             ("Estimated Risk Level",      ma_adv_risk),
             ("Clinical Significance",     "MAs are the earliest ophthalmoscopic sign of DR. Count ≥ 5 warrants referral."),
             ("Detection Method",          "UNet + SimAM attention (patch-based, CLAHE green-channel)"),
         ], s, font))
 
-        # --- Basic view ---
+        # --- Minimum view ---
         story.append(Spacer(1, 4 * mm))
         story.append(Paragraph(
-            "<b>🎯 Basic Mode — Refined MA Candidates (Fewer False Positives)</b>",
+            "<b>🎯 Minimum Mode — Refined MA Candidates (Fewer False Positives)</b>",
             ParagraphStyle("ma_basic_hdr", fontName=ef, fontSize=10, spaceAfter=2 * mm)
         ))
 
         if ma_basic_img is not None and ma_removed_img is not None:
             story.append(_side_by_side(
-                ma_basic_img,  f"Basic — {ma_basic_count} MA cluster(s) kept",
+                ma_basic_img,  f"Minimum — {ma_basic_count} MA cluster(s) kept",
                 ma_removed_img, f"Removed FPs — {ma_removed} candidate(s) filtered",
                 s, max_half_mm=87,
             ))
         elif ma_basic_img is not None:
             story.append(_np_to_rl(ma_basic_img, max_w_mm=130, max_h_mm=150))
-            story.append(Paragraph(f"Basic — {ma_basic_count} MA cluster(s) kept", s["img_label"]))
+            story.append(Paragraph(f"Minimum — {ma_basic_count} MA cluster(s) kept", s["img_label"]))
 
         ma_basic_risk = ("Low" if ma_basic_count == 0 else
                          "Moderate" if ma_basic_count <= 5 else
                          "High" if ma_basic_count <= 15 else "Very High")
         story.append(Spacer(1, 2 * mm))
         story.append(_metric_table([
-            ("Basic MA Cluster Count",    str(ma_basic_count)),
+            ("Minimum MA Cluster Count",    str(ma_basic_count)),
             ("False Positives Removed",   f"{ma_removed} ({ma_fp_pct:.1f}% reduction)"),
             ("Estimated Risk Level",      ma_basic_risk),
             ("Post-Processing",           "Heuristic FP filter (area ≥ 8 px, circularity ≥ 0.45, confidence ≥ 0.25)"),
@@ -644,8 +644,8 @@ def _build_story(phase, patient, doctor_name, results, original_image,
         ("Lesion Load",      f"HE: {areas.get('hard_exudates',0)} | HEM: {areas.get('hemorrhages',0)} | SE: {areas.get('soft_exudates',0)} px²"),
     ]
     if phase == 2:
-        summary_rows.append(("MA — Advanced Count", f"{ma_adv_val} cluster(s)"))
-        summary_rows.append(("MA — Basic Count (FP-Reduced)", f"{ma_basic_val} cluster(s)"))
+        summary_rows.append(("MA — Maximum Count", f"{ma_adv_val} cluster(s)"))
+        summary_rows.append(("MA — Minimum Count (FP-Reduced)", f"{ma_basic_val} cluster(s)"))
         _rfnld = results.get("rfnld", {})
         rfnld_summary_found = _rfnld.get("defects_found", False)
         rfnld_summary_count = _rfnld.get("defect_count", 0)
@@ -669,10 +669,10 @@ def _build_story(phase, patient, doctor_name, results, original_image,
             "• Lesion burden elevated — urgent ophthalmology review advised.",
             s["warn"]
         ))
-    # Use Basic count for clinical referral threshold (more precise)
+    # Use Minimum count for clinical referral threshold (more precise)
     if phase == 2 and isinstance(ma_basic_val, int) and ma_basic_val >= 5:
         story.append(Paragraph(
-            f"• {ma_basic_val} MA clusters detected (Basic mode, FP-reduced) — exceeds referral threshold of 5. "
+            f"• {ma_basic_val} MA clusters detected (Minimum mode, FP-reduced) — exceeds referral threshold of 5. "
             f"Ophthalmology referral within 3 months.",
             s["warn"]
         ))

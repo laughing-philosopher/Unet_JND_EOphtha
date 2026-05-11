@@ -301,17 +301,30 @@ def _run_phase1(job_id: str, img_rgb: np.ndarray) -> None:
 
     q.put({"type": "progress", "step": "lesion", "done": True})
 
-    # ── Glaucoma Grading (with CDR refinement from ODOC) ──────────────────── #
+    # ── Glaucoma Grading (RF Model-based) ─────────────────────────────────── #
     try:
         _update("Running Glaucoma Grading...")
-        from processing.processing_glaucoma_grading import predict_glaucoma_severity
-        tmp      = _save_temp_image(img_rgb)
-        raw_grade= predict_glaucoma_severity(tmp, _get_glaucoma_model())
-        os.unlink(tmp)
+        
+        # Use RF model output generated during OD/OC step
+        rf_pred = results.get("odoc_rf", {}).get("rf_pred", "Unknown")
+        rf_prob = results.get("odoc_rf", {}).get("rf_prob", 0.0)
+        
+        if rf_pred == "Glaucoma":
+            if rf_prob >= 0.7:
+                gl_grade = "Advanced Glaucoma"
+            elif rf_prob >= 0.5:
+                gl_grade = "Moderate Glaucoma"
+            else:
+                gl_grade = "Glaucoma Suspect"
+            cdr_reason = f"Random Forest detected Glaucoma (Probability: {rf_prob:.1%})"
+        elif rf_pred == "Normal":
+            gl_grade = "No Glaucoma"
+            cdr_reason = f"Random Forest predicts Normal (Probability: {(1-rf_prob):.1%})"
+        else:
+            gl_grade = "Error"
+            cdr_reason = "RF Model failed or OD/OC extraction failed."
 
-        # Refine grade using CDR measurements from ODOC
-        meas = results.get("odoc", {}).get("measurements", {})
-        gl_grade, cdr_reason = _cdr_refined_glaucoma(raw_grade, meas)
+        raw_grade = f"RF: {rf_pred} (Prob: {rf_prob:.2f})"
 
         gl_levels = {
             "No Glaucoma": 0, "Glaucoma Suspect": 1,

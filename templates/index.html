@@ -204,7 +204,7 @@
           <img src="/static/aakhi_logo.png" alt="AAKHI Logo" class="h-12 w-auto object-contain" />
           <h1 class="text-5xl font-light tracking-widest text-slate-700" x-text="t('app_title')">AAKHI</h1>
         </div>
-        <h2 class="text-2xl text-slate-500 mb-2">AI Assisted Kit for Retinal Screening</h2>
+        <h2 class="text-2xl text-slate-500 mb-2">AI Assisted Kit for Retina Screening</h2>
         <p class="text-lg text-slate-400 tracking-wide">Simple, Offline, Multilingual</p>
       </div>
 
@@ -509,6 +509,56 @@
         </div>
 
       </div><!-- end results card -->
+
+      <!-- Executive Summary -->
+      <div x-show="phase1Ready" class="bg-white rounded-xl border border-slate-200 p-6">
+        <h3 class="text-base font-medium text-slate-700 mb-4">Executive Summary</h3>
+        <div class="grid grid-cols-2 gap-4">
+          <!-- Phase 1 Summary -->
+          <div class="space-y-3">
+            <div class="p-3 rounded-lg border border-slate-100 bg-slate-50">
+              <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Diabetic Retinopathy</div>
+              <div class="text-lg font-medium" :class="drGradeColor(results?.results?.drg?.level)"
+                x-text="results?.results?.drg?.grade || '—'"></div>
+            </div>
+            <div class="p-3 rounded-lg border border-slate-100 bg-slate-50">
+              <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Glaucoma</div>
+              <div class="text-lg font-medium" :class="glGradeColor(results?.results?.glaucoma?.level)"
+                x-text="results?.results?.glaucoma?.grade || '—'"></div>
+            </div>
+          </div>
+
+          <!-- Phase 2 Summary -->
+          <div class="space-y-3">
+            <div x-show="phase2Ready" class="p-3 rounded-lg border border-slate-100 bg-slate-50">
+              <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Microaneurysms</div>
+              <div class="text-lg font-medium"
+                :class="(results?.results?.ma?.count || 0) > 0 ? 'text-amber-600' : 'text-emerald-600'"
+                x-text="(results?.results?.ma?.count || 0) > 0 ? ((results?.results?.ma?.count || 0) + ' Detected') : 'None Detected'">
+              </div>
+            </div>
+
+            <div x-show="phase2Ready" class="p-3 rounded-lg border border-slate-100 bg-slate-50">
+              <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">RFNL Defects</div>
+              <div class="text-lg font-medium"
+                :class="results?.results?.rfnld?.defects_found ? 'text-red-600' : 'text-emerald-600'"
+                x-text="results?.results?.rfnld?.defects_found ? 'Defects Found' : 'Normal'"></div>
+            </div>
+
+            <div x-show="!phase2Ready"
+              class="p-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-sm h-full text-center">
+              Phase 2 analysis (MA & RFNLD)<br>in progress...
+            </div>
+          </div>
+        </div>
+
+        <!-- Next Steps -->
+        <div class="mt-4 p-4 rounded-lg" :class="overallSeverityColor()">
+          <div class="font-semibold text-sm mb-2">Recommended Next Steps</div>
+          <div class="text-sm leading-relaxed" x-html="overallNextSteps()"></div>
+        </div>
+      </div>
+
     </div><!-- end right panel -->
 
   </div><!-- end grid -->
