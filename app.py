@@ -486,11 +486,11 @@ def main():
                     # ============================================================ #
                     st.markdown("---")
                     st.markdown("#### 🔬 Maximum Mode — All MA Candidates (Higher Sensitivity)")
-                    st.caption("Shows every candidate detected by the model, including potential false positives.")
+                    st.caption("Shows every candidate suspected by the model, including potential false positives.")
 
                     circled_adv, n_adv, _, stats_adv, top5_adv = _build_circled_image(image_cv2, baseline_mask)
                     st.image(circled_adv,
-                             caption=f"Maximum — {n_adv} MA cluster(s) detected (Top 5 largest in Red)",
+                             caption=f"Maximum — {n_adv} MA cluster(s) suspected (to be clinically correlated by a professional) (Top 5 largest in Red)",
                              use_container_width=True)
 
                     # ============================================================ #
@@ -521,7 +521,7 @@ def main():
 
                     # --- Build summary images for the PDF report ---
                     stats_img_adv = _build_stats_image(
-                        f"Maximum Mode — {n_adv} MAs Detected (Top 5 in Red)", n_adv, stats_adv, top5_adv)
+                        f"Maximum Mode — {n_adv} MAs Suspected (to be clinically correlated by a professional) (Top 5 in Red)", n_adv, stats_adv, top5_adv)
                     stats_img_basic = _build_stats_image(
                         f"Minimum Mode — {n_basic} MAs Kept (Top 5 in Red)", n_basic, stats_basic, top5_basic)
 
@@ -542,7 +542,7 @@ def main():
                     all_outputs.extend([
                         ("MA — Probability Map", disp),
                         ("MA — Maximum Mode — Overlay (All Candidates)", overlay_adv),
-                        (f"MA — Maximum Mode — Clusters ({n_adv} detected)", circled_adv),
+                        (f"MA — Maximum Mode — Clusters ({n_adv} suspected (to be clinically correlated by a professional))", circled_adv),
                         ("MA — Maximum Mode — Detection Summary", stats_img_adv),
                         (f"MA — Minimum Mode — Clusters ({n_basic} kept, {removed_count} removed)", circled_basic),
                         (f"MA — Minimum Mode — Removed False Positives ({removed_count})", removed_vis),

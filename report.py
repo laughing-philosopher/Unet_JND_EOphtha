@@ -96,8 +96,36 @@ def generate_report(
     table_counter = 1 
 
     # ---- Header & Patient Info ----
-    story.append(Paragraph("AAKHI", title_style))
-    story.append(Paragraph("Comprehensive Retinal Image Analysis Report", base["Italic"]))
+    import os
+    _BASE_DIR = os.environ.get('AAKHI_BASE_PATH') or os.path.dirname(os.path.abspath(__file__))
+    logo_iitbbs_path = os.path.join(_BASE_DIR, "iitbbs logo.png")
+    logo_aakhi_path = os.path.join(_BASE_DIR, "aakhi_logo.png")
+    
+    row = []
+    if os.path.exists(logo_iitbbs_path):
+        row.append(RLImage(logo_iitbbs_path, width=25*mm, height=25*mm, kind='proportional'))
+    else:
+        row.append("")
+        
+    title_p = Paragraph("AAKHI", title_style)
+    subtitle_p = Paragraph("Comprehensive Retinal Image Analysis Report", ParagraphStyle("sub", parent=base["Italic"], alignment=TA_CENTER))
+    row.append([title_p, subtitle_p])
+    
+    if os.path.exists(logo_aakhi_path):
+        row.append(RLImage(logo_aakhi_path, width=25*mm, height=25*mm, kind='proportional'))
+    else:
+        row.append("")
+        
+    header_table = Table([row], colWidths=[35*mm, 100*mm, 35*mm])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (0,0), (0,0), 'LEFT'),
+        ('ALIGN', (1,0), (1,0), 'CENTER'),
+        ('ALIGN', (2,0), (2,0), 'RIGHT'),
+    ]))
+    
+    story.append(header_table)
+    story.append(Spacer(1, 2*mm))
     story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor("#1c4b82")))
     
     report_date = datetime.now().strftime("%d %B %Y, %I:%M %p")

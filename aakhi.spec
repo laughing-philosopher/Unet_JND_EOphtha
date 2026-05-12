@@ -34,6 +34,8 @@ all_datas = (
         ('main.py',          '.'),
         ('auth.py',          '.'),
         ('report_v2.py',     '.'),
+        ('aakhi_logo.png',   '.'),
+        ('iitbbs logo.png',  '.'),
     ]
 )
 
@@ -58,11 +60,13 @@ all_hidden = (
         # App modules
         'processing', 'processing.processing_dr_grading',
         'processing.processing_glaucoma_grading',
+        'processing.processing_odoc',
         'processing.processing_odoc_basic',
         'processing.processing_lesion',
         'processing.processing_ma',
+        'processing.processing_rfnld',
         'processing.overlay_odoc',
-        'auth', 'report_v2',
+        'auth', 'report_v2', 'translations', 'helper',
         # efficientnet (TF DR model)
         'efficientnet', 'efficientnet.tfkeras',
         # misc

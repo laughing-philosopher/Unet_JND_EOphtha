@@ -172,7 +172,7 @@ FOLLOW_UP = {
 }
 
 RFNLD_DESCRIPTIONS = {
-    True:  "RNFL defects detected. Wedge-shaped or diffuse thinning of the retinal nerve fibre layer observed around the optic disc. This finding is highly suggestive of glaucomatous damage and warrants urgent optic nerve evaluation including OCT-RNFL, visual field testing, and IOP measurement.",
+    True:  "RNFL defects suspected (to be clinically correlated by a professional). Wedge-shaped or diffuse thinning of the retinal nerve fibre layer observed around the optic disc. This finding is highly suggestive of glaucomatous damage and warrants urgent optic nerve evaluation including OCT-RNFL, visual field testing, and IOP measurement.",
     False: "No significant RNFL defects detected in the peripapillary region. The retinal nerve fibre layer appears intact. However, clinical correlation with OCT and visual fields is recommended for comprehensive glaucoma assessment.",
 }
 
@@ -318,8 +318,41 @@ def _build_story(phase, patient, doctor_name, results, original_image,
 
     # ── Cover header ────────────────────────────────────────────────────────── #
     phase_label = _t(lang, f"report_phase{phase}")
-    story.append(Paragraph(_t(lang, "report_title"), s["title"]))
-    story.append(Paragraph(phase_label, s["subtitle"]))
+    
+    logo_iitbbs_path = os.path.join(_BASE_DIR, "iitbbs logo.png")
+    logo_aakhi_path = os.path.join(_BASE_DIR, "aakhi_logo.png")
+    
+    row = []
+    
+    # Left logo (IIT BBS)
+    if os.path.exists(logo_iitbbs_path):
+        img_left = RLImage(logo_iitbbs_path, width=25*mm, height=25*mm, kind='proportional')
+        row.append(img_left)
+    else:
+        row.append("")
+        
+    # Center titles
+    title_p = Paragraph(_t(lang, "report_title"), s["title"])
+    subtitle_p = Paragraph(phase_label, s["subtitle"])
+    row.append([title_p, subtitle_p])
+    
+    # Right logo (Aakhi)
+    if os.path.exists(logo_aakhi_path):
+        img_right = RLImage(logo_aakhi_path, width=25*mm, height=25*mm, kind='proportional')
+        row.append(img_right)
+    else:
+        row.append("")
+        
+    header_table = Table([row], colWidths=[35*mm, 104*mm, 35*mm])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (0,0), (0,0), 'LEFT'),
+        ('ALIGN', (1,0), (1,0), 'CENTER'),
+        ('ALIGN', (2,0), (2,0), 'RIGHT'),
+    ]))
+    
+    story.append(header_table)
+    story.append(Spacer(1, 2 * mm))
     story.append(_hr())
     story.append(Spacer(1, 4 * mm))
 
@@ -520,12 +553,12 @@ def _build_story(phase, patient, doctor_name, results, original_image,
         if ma_adv_img is not None and ma_orig is not None:
             story.append(_side_by_side(
                 ma_orig,   "Probability map (green overlay)",
-                ma_adv_img, f"Maximum — {ma_adv_count} MA cluster(s) detected",
+                ma_adv_img, f"Maximum — {ma_adv_count} MA cluster(s) suspected (to be clinically correlated by a professional)",
                 s, max_half_mm=87,
             ))
         elif ma_adv_img is not None:
             story.append(_np_to_rl(ma_adv_img, max_w_mm=130, max_h_mm=150))
-            story.append(Paragraph(f"Maximum — {ma_adv_count} MA cluster(s) detected", s["img_label"]))
+            story.append(Paragraph(f"Maximum — {ma_adv_count} MA cluster(s) suspected (to be clinically correlated by a professional)", s["img_label"]))
 
         ma_adv_risk = ("Low" if ma_adv_count == 0 else
                        "Moderate" if ma_adv_count <= 5 else
@@ -585,7 +618,7 @@ def _build_story(phase, patient, doctor_name, results, original_image,
             # Status banner
             if rfnld_found:
                 story.append(Paragraph(
-                    f'<b>RFNLD Status:</b>  <font color="#cc2200">DEFECTS DETECTED</font>  '
+                    f'<b>RFNLD Status:</b>  <font color="#cc2200">DEFECTS SUSPECTED (to be clinically correlated by a professional)</font>  '
                     f'— {rfnld_count} defect cluster(s) identified',
                     ParagraphStyle("rfnld_status", fontName=ef, fontSize=10, spaceAfter=3 * mm)
                 ))
@@ -652,7 +685,7 @@ def _build_story(phase, patient, doctor_name, results, original_image,
         if _rfnld.get("error"):
             summary_rows.append(("RFNLD", f"Error: {_rfnld['error']}"))
         else:
-            rfnld_label = f"{'DETECTED' if rfnld_summary_found else 'None'} — {rfnld_summary_count} defect(s)"
+            rfnld_label = f"{'SUSPECTED (to be clinically correlated by a professional)' if rfnld_summary_found else 'None'} — {rfnld_summary_count} defect(s)"
             summary_rows.append(("RFNLD (Nerve Fibre Layer)", rfnld_label))
     story.append(_metric_table(summary_rows, s, font))
 
@@ -672,7 +705,7 @@ def _build_story(phase, patient, doctor_name, results, original_image,
     # Use Minimum count for clinical referral threshold (more precise)
     if phase == 2 and isinstance(ma_basic_val, int) and ma_basic_val >= 5:
         story.append(Paragraph(
-            f"• {ma_basic_val} MA clusters detected (Minimum mode, FP-reduced) — exceeds referral threshold of 5. "
+            f"• {ma_basic_val} MA clusters suspected (to be clinically correlated by a professional) (Minimum mode, FP-reduced) — exceeds referral threshold of 5. "
             f"Ophthalmology referral within 3 months.",
             s["warn"]
         ))
@@ -681,7 +714,7 @@ def _build_story(phase, patient, doctor_name, results, original_image,
         _rfnld_rec = results.get("rfnld", {})
         if _rfnld_rec.get("defects_found", False):
             story.append(Paragraph(
-                f"• RNFL defects detected ({_rfnld_rec.get('defect_count', 0)} cluster(s)) — "
+                f"• RNFL defects suspected (to be clinically correlated by a professional) ({_rfnld_rec.get('defect_count', 0)} cluster(s)) — "
                 f"urgent glaucoma evaluation with OCT-RNFL and visual field testing recommended.",
                 s["warn"]
             ))
