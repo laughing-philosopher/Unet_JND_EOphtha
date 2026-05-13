@@ -29,7 +29,7 @@ def get_model():
 #  False-Positive Reduction (from Kaggle notebook: reduction-of-false-positive-from-ma)
 #
 #  Heuristic filters applied to each connected component in the baseline mask:
-#    - Area < 8 px              → removed
+#    - Area outside [5, 15] px² → removed
 #    - Circularity < 0.45       → removed  (4π·area / perimeter²)
 #    - Mean confidence < 0.25   → removed
 #
@@ -38,7 +38,8 @@ def get_model():
 # ---------------------------------------------------------------------------
 
 # Hardcoded heuristic thresholds
-_FP_MIN_AREA        = 8     # minimum component area in pixels
+_FP_MIN_AREA        = 5     # minimum component area in pixels
+_FP_MAX_AREA        = 15    # maximum component area in pixels
 _FP_MIN_CIRCULARITY = 0.45  # minimum circularity (4π·area / perimeter²)
 _FP_MIN_CONFIDENCE  = 0.25  # minimum mean probability inside the component
 
@@ -94,7 +95,7 @@ def fp_reduction(prob_map, binary_mask):
 
         # ---- Heuristic FP filter ----
         keep = True
-        if area < _FP_MIN_AREA:
+        if area < _FP_MIN_AREA or area > _FP_MAX_AREA:
             keep = False
         if circularity < _FP_MIN_CIRCULARITY:
             keep = False

@@ -506,7 +506,7 @@ def _build_story(phase, patient, doctor_name, results, original_image,
     story.append(_metric_table([
         ("Model",               "SE-ResNet101 (3-class glaucoma grading)"),
         ("Classification",      glaucoma_grade),
-        ("Corroborating CDR",   f"vCDR = {vcdr_val:.3f}  (suspicion threshold: ≥ 0.65)"),
+        ("Corroborating CDR",   f"vCDR = {vcdr_val:.3f}  (suspicion threshold: > 0.5)"),
         ("ISNT Rule Violation", "Yes — suggestive of glaucomatous damage"
                                  if not meas.get("isnt_normal", True) else "No"),
     ], s, font))
@@ -596,7 +596,7 @@ def _build_story(phase, patient, doctor_name, results, original_image,
             ("Minimum MA Cluster Count",    str(ma_basic_count)),
             ("False Positives Removed",   f"{ma_removed} ({ma_fp_pct:.1f}% reduction)"),
             ("Estimated Risk Level",      ma_basic_risk),
-            ("Post-Processing",           "Heuristic FP filter (area ≥ 8 px, circularity ≥ 0.45, confidence ≥ 0.25)"),
+            ("Post-Processing",           "Heuristic FP filter (area 5–15 px², circularity ≥ 0.45, confidence ≥ 0.25)"),
         ], s, font))
 
     # ── SECTION 6 — RFNLD DETECTION (Phase 2 only) ────────────────────────── #
@@ -692,7 +692,7 @@ def _build_story(phase, patient, doctor_name, results, original_image,
     story += _section_header(_t(lang, "recommendations"), s)
     rec_text = FOLLOW_UP.get(dr_level, "Consult ophthalmologist.")
     story.append(Paragraph(f"• DR follow-up: {rec_text}", s["body"]))
-    if not meas.get("isnt_normal", True) or vcdr_val > 0.65:
+    if not meas.get("isnt_normal", True) or vcdr_val > 0.5:
         story.append(Paragraph(
             "• Optic disc: Formal glaucoma evaluation (IOP, visual fields, OCT-RNFL) recommended.",
             s["warn"]

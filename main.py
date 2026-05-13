@@ -150,41 +150,26 @@ def _cdr_refined_glaucoma(raw_grade: str, measurements: dict) -> tuple:
     """
     Refine glaucoma grade using CDR measurements and ISNT rule from ODOC.
 
-    Clinical rules applied (evidence-based):
-      vCDR >= 0.80              → at least Moderate Glaucoma
-      vCDR >= 0.65              → at least Glaucoma Suspect
-      ISNT rule violated        → at least Glaucoma Suspect
-      vCDR >= 0.65 + ISNT bad   → upgrade one level beyond raw grade
+    Clinical rules applied:
+      if vCDR > 0.5 or ISNT rule violated then label as Glaucoma Suspect
+      else No Glaucoma
 
     Returns (refined_grade: str, reason: str)
     """
-    GRADES = ["No Glaucoma", "Glaucoma Suspect", "Moderate Glaucoma", "Advanced Glaucoma"]
-    idx    = GRADES.index(raw_grade) if raw_grade in GRADES else 0
-
     vcdr       = measurements.get("vcdr", 0.0)
     isnt_ok    = measurements.get("isnt_normal", True)
-    reason     = "image model prediction"
 
-    # Apply CDR-based escalation
-    if vcdr >= 0.80:
-        new_idx = max(idx, 2)  # at least Moderate
-        reason  = f"vCDR={vcdr:.3f} >= 0.80 (high glaucoma probability threshold)"
-    elif vcdr >= 0.65 and not isnt_ok:
-        new_idx = max(idx, max(1, idx + 1))  # upgrade one step
-        reason  = f"vCDR={vcdr:.3f} >= 0.65 + ISNT rule violated"
-    elif vcdr >= 0.65:
-        new_idx = max(idx, 1)  # at least Suspect
-        reason  = f"vCDR={vcdr:.3f} >= 0.65 (borderline CDR)"
-    elif not isnt_ok:
-        new_idx = max(idx, 1)  # at least Suspect
-        reason  = "ISNT rule violated (neuroretinal rim asymmetry)"
+    if vcdr > 0.5 or not isnt_ok:
+        refined = "Glaucoma Suspect"
+        reasons = []
+        if vcdr > 0.5:
+            reasons.append(f"vCDR={vcdr:.3f} > 0.5")
+        if not isnt_ok:
+            reasons.append("ISNT rule violated")
+        reason = " | ".join(reasons)
     else:
-        new_idx = idx
-
-    new_idx = min(new_idx, len(GRADES) - 1)
-    refined  = GRADES[new_idx]
-    if refined != raw_grade:
-        reason = f"Upgraded from '{raw_grade}': {reason}"
+        refined = "No Glaucoma"
+        reason  = "vCDR <= 0.5 and ISNT rule satisfied"
 
     return refined, reason
 
@@ -325,6 +310,10 @@ def _run_phase1(job_id: str, img_rgb: np.ndarray) -> None:
             cdr_reason = "RF Model failed or OD/OC extraction failed."
 
         raw_grade = f"RF: {rf_pred} (Prob: {rf_prob:.2f})"
+
+        # Refine glaucoma grade using CDR measurements and ISNT rule
+        odoc_meas = results.get("odoc", {}).get("measurements", {})
+        gl_grade, cdr_reason = _cdr_refined_glaucoma(gl_grade, odoc_meas)
 
         gl_levels = {
             "No Glaucoma": 0, "Glaucoma Suspect": 1,
